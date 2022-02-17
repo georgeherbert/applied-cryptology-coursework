@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import math
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -35,12 +36,41 @@ def attack():
     exponent_int = int(public_exponent, 16)
     ciphertext_int = int(ciphertext.split(":")[1], 16)
 
-    print(int_to_pretty_hex(1)) # 1:01
-    print(int_to_pretty_hex(17)) # 1:11
-    print(int_to_pretty_hex(255)) # 1:FF
-    print(int_to_pretty_hex(256)) # 2:0100
+    k = math.log(modulus_int, 256)
+    B = 2 ** (8 * (k - 1))
 
-    # response = interact(label, guess)
+    f_1 = 1
+    response = 0
+    
+    while response != 2:
+        f_1 *= 2
+        guess = (pow(f_1, exponent_int, modulus_int) * ciphertext_int) % modulus_int
+        guess_hex = int_to_pretty_hex(guess)
+        response = interact(label, guess_hex)
+        print(response)
+
+    f_2 = math.floor((modulus_int + B) / B) * f_1 // 2
+    print(f_2)
+
+    guess = (pow(f_2, exponent_int, modulus_int) * ciphertext_int) % modulus_int
+    guess_hex = int_to_pretty_hex(guess)
+    response = interact(label, guess_hex)
+    print(response)
+
+    m_min = math.ceil(modulus_int / f_2)
+    m_max = math.floor((modulus_int + B) / f_2)
+    
+    f_tmp = math.floor((2 * B) / (m_max - m_min))
+    i = math.floor((f_tmp * m_min) / modulus_int)
+
+    f_3 = math.ceil((i * modulus_int) / m_min)
+
+    guess = (pow(f_3, exponent_int, modulus_int) * ciphertext_int) % modulus_int
+    guess_hex = int_to_pretty_hex(guess)
+    response = interact(label, guess_hex)
+    print(response)
+    
+    # response = interact(label, ciphertext)
     # print(response)
 
 if __name__ == "__main__":
