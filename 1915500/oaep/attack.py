@@ -2,6 +2,7 @@ import sys
 import subprocess
 import math
 from decimal import Decimal, getcontext, ROUND_CEILING, ROUND_FLOOR
+from hashlib import sha1
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -25,65 +26,83 @@ def interact(l, c):
     return int(TARGET_OUT.readline().strip())
 
 def send_to_oracle(f, e, n, c, k, l):
-    # p1 = pow(f, e, n)
-    # p2 = (p1 * c) % n
     value = (pow(f, e, n) * c) % n
     value_pretty = int_to_pretty_hex(value, k)
     return interact(l, value_pretty)
 
 def step_1(e, n, c, k, l):
     f_1 = 2
-    while send_to_oracle(f_1, e, n, c, k, l) != 2:
+    while send_to_oracle(f_1, e, n, c, k, l) != 1:
         f_1 *= 2
     return f_1
 
-def step_2(f_1, n, B, e, c, k, l):
-    f_2 = int(math.floor((n + B) / B) * (f_1 / 2))
-    while send_to_oracle(f_2, e, n, c, k, l) != 1:
+def step_2(f_1, n, b, e, c, k, l):
+    f_2 = int(math.floor((n + b) / b) * (f_1 / 2))
+    while send_to_oracle(f_2, e, n, c, k, l) != 2:
         f_2 += int(f_1 / 2)
     return f_2
 
-def step_3(f_2, n, B, e, c, k, l):
+def step_3(f_2, n, b, e, c, k, l):
     getcontext().prec = 500
 
     m_min = Decimal(n / f_2).to_integral_value(rounding = ROUND_CEILING)
-    m_max = Decimal((n + B) / f_2).to_integral_value(rounding = ROUND_FLOOR)
+    m_max = Decimal((n + b) / f_2).to_integral_value(rounding = ROUND_FLOOR)
     
-    while True:
-        f_tmp = Decimal((2 * B) / (m_max - m_min)).to_integral_value(rounding = ROUND_FLOOR)
+    while m_min != m_max:
+        f_tmp = Decimal((2 * b) / (m_max - m_min)).to_integral_value(rounding = ROUND_FLOOR)
         i = Decimal((f_tmp * m_min) / n).to_integral_value(rounding = ROUND_FLOOR)
         f_3 = Decimal((i * n) / m_min).to_integral_value(rounding = ROUND_CEILING)
         response = send_to_oracle(int(f_3), e, n, c, k, l)
-        if response == 2:
-            m_min = Decimal((i * n + B) / f_3).to_integral_value(rounding = ROUND_CEILING)
-        elif response == 1:
-            m_max = Decimal((i * n + B) / f_3).to_integral_value(rounding = ROUND_FLOOR)
-        if Decimal(m_max - m_min) < 1:
-            return m_min
+        if response == 1:
+            m_min = Decimal((i * n + b) / f_3).to_integral_value(rounding = ROUND_CEILING)
+        elif response == 2:
+            m_max = Decimal((i * n + b) / f_3).to_integral_value(rounding = ROUND_FLOOR)
+    return int(m_min)
+
+def i2osp(integer: int, size: int = 4) -> str:
+    return b"".join([chr((integer >> (8 * i)) & 0xFF).encode() for i in reversed(range(size))])
+
+def mgf1(input_str, length):
+    counter = 0
+    output = b""
+    while len(output) < length:
+        C = i2osp(counter, 4)
+        output += sha1(input_str + C).digest()
+        counter += 1
+    return output[:length]
+
+def xor(x, y):
+    return bytes([x_i ^ y_i for x_i, y_i in zip(x, y)])
 
 def attack():
     n, e, l, c = get_attack_params()
 
     n_int = int(n, 16)
     e_int = int(e, 16)
+    l_int = int(l[3:], 16)
     k, c_int = [int(i, 16) for i in c.split(":")]
-    B = 2 ** (8 * (k - 1))
+    b = 2 ** (8 * (k - 1))
 
     f_1 = step_1(e_int, n_int, c_int, k, l)
+    f_2 = step_2(f_1, n_int, b, e_int, c_int, k, l)
+    em_int = step_3(f_2, n_int, b, e_int, c_int, k, l)
 
-    print("f_1 previous", f_1 / 2)
-    print("f_1", f_1)
+    em = int(em_int).to_bytes(k, byteorder = "big")
+    assert em[0] == 0x00, "Y must equal 0x00"
 
-    f_2 = step_2(f_1, n_int, B, e_int, c_int, k, l)
+    masked_seed = em[1:21]
+    masked_db = em[21:]
+    seed_mask = mgf1(masked_db, 20)
+    seed = xor(masked_seed, seed_mask)
+    db_mask = mgf1(seed, k - 21)
+    db = xor(masked_db, db_mask)
 
-    print("f_2 previous", f_2 - int(f_1 / 2))
-    print("f_2", f_2)
+    lhash = sha1(l_int.to_bytes(16, byteorder = "big")).digest()
+    lhash_ = db[:20]
+    assert lhash_ == lhash, "lHash' must equal lHash"
 
-    m_min = step_3(f_2, n_int, B, e_int, c_int, k, l)
-    
-    print(m_min)
-    print("")
-    print(hex(int(m_min)))
+    m = db[db.index(0x01) + 1:]
+    print(m.hex())
 
 if __name__ == "__main__":
     attack()
