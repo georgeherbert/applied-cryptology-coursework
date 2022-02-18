@@ -16,6 +16,14 @@ def get_attack_params():
     with open(sys.argv[2], "r") as config:
         return [config.readline().strip() for _ in range(4)]
 
+def calc_attack_params_int(n, e, l, c):
+    n_int = int(n, 16)
+    e_int = int(e, 16)
+    lLength, l_int = [int(i, 16) for i in l.split(":")]
+    k, c_int = [int(i, 16) for i in c.split(":")]
+    b = 2 ** (8 * (k - 1))
+    return n_int, e_int, lLength, l_int, k, c_int, b 
+
 def int_to_pretty_hex(value_int, k):
     return f"{k:x}:{value_int:0{k * 2}x}"
 
@@ -59,14 +67,15 @@ def step_3(f_2, n, b, e, c, k, l):
             m_max = Decimal((i * n + b) / f_3).to_integral_value(rounding = ROUND_FLOOR)
     return int(m_min)
 
-def i2osp(integer: int, size: int = 4) -> str:
-    return b"".join([chr((integer >> (8 * i)) & 0xFF).encode() for i in reversed(range(size))])
+# https://en.wikipedia.org/wiki/Mask_generation_function#Example_code
+def i2osp(integer):
+    return b"".join([chr((integer >> (8 * i)) & 0xFF).encode() for i in reversed(range(4))])
 
 def mgf1(input_str, length):
     counter = 0
     output = b""
     while len(output) < length:
-        C = i2osp(counter, 4)
+        C = i2osp(counter)
         output += sha1(input_str + C).digest()
         counter += 1
     return output[:length]
@@ -74,20 +83,9 @@ def mgf1(input_str, length):
 def xor(x, y):
     return bytes([x_i ^ y_i for x_i, y_i in zip(x, y)])
 
-def attack():
-    n, e, l, c = get_attack_params()
-
-    n_int = int(n, 16)
-    e_int = int(e, 16)
-    l_int = int(l[3:], 16)
-    k, c_int = [int(i, 16) for i in c.split(":")]
-    b = 2 ** (8 * (k - 1))
-
-    f_1 = step_1(e_int, n_int, c_int, k, l)
-    f_2 = step_2(f_1, n_int, b, e_int, c_int, k, l)
-    em_int = step_3(f_2, n_int, b, e_int, c_int, k, l)
-
+def calc_m_from_em(em_int, k, l_int, lLength):
     em = int(em_int).to_bytes(k, byteorder = "big")
+    # print(em.hex())
     assert em[0] == 0x00, "Y must equal 0x00"
 
     masked_seed = em[1:21]
@@ -96,12 +94,25 @@ def attack():
     seed = xor(masked_seed, seed_mask)
     db_mask = mgf1(seed, k - 21)
     db = xor(masked_db, db_mask)
+    # print(db.hex())
 
-    lhash = sha1(l_int.to_bytes(16, byteorder = "big")).digest()
+    lhash = sha1(l_int.to_bytes(lLength, byteorder = "big")).digest()
     lhash_ = db[:20]
     assert lhash_ == lhash, "lHash' must equal lHash"
 
     m = db[db.index(0x01) + 1:]
+
+    return m
+
+def attack():
+    n, e, l, c = get_attack_params()
+    n_int, e_int, lLength, l_int, k, c_int, b = calc_attack_params_int(n, e, l, c)
+
+    f_1 = step_1(e_int, n_int, c_int, k, l)
+    f_2 = step_2(f_1, n_int, b, e_int, c_int, k, l)
+    em_int = step_3(f_2, n_int, b, e_int, c_int, k, l)
+
+    m = calc_m_from_em(em_int, k, l_int, lLength)
     print(m.hex())
 
 if __name__ == "__main__":
