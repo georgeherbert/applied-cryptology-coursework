@@ -12,6 +12,8 @@ TARGET = subprocess.Popen(
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
+# INTERACTIONS = 0
+
 def get_attack_params():
     with open(sys.argv[2], "r") as config:
         return [config.readline().strip() for _ in range(4)]
@@ -31,6 +33,8 @@ def interact(l, c):
     TARGET_IN.write(f"{l}\n".encode())
     TARGET_IN.write(f"{c}\n".encode())
     TARGET_IN.flush()
+    # global INTERACTIONS
+    # INTERACTIONS += 1
     return int(TARGET_OUT.readline().strip())
 
 def send_to_oracle(f, e, n, c, k, l):
@@ -40,17 +44,21 @@ def send_to_oracle(f, e, n, c, k, l):
 
 def step_1(e, n, c, k, l):
     f_1 = 2
+    interactions = 1
     while send_to_oracle(f_1, e, n, c, k, l) != 1:
         f_1 *= 2
-    return f_1
+        interactions += 1
+    return f_1, interactions
 
-def step_2(f_1, n, b, e, c, k, l):
+def step_2(f_1, interactions, n, b, e, c, k, l):
     f_2 = int(math.floor((n + b) / b) * (f_1 / 2))
+    interactions += 1
     while send_to_oracle(f_2, e, n, c, k, l) != 2:
         f_2 += int(f_1 / 2)
-    return f_2
+        interactions += 1
+    return f_2, interactions
 
-def step_3(f_2, n, b, e, c, k, l):
+def step_3(f_2, n, b, interactions, e, c, k, l):
     getcontext().prec = 500
 
     m_min = Decimal(n / f_2).to_integral_value(rounding = ROUND_CEILING)
@@ -61,11 +69,12 @@ def step_3(f_2, n, b, e, c, k, l):
         i = Decimal((f_tmp * m_min) / n).to_integral_value(rounding = ROUND_FLOOR)
         f_3 = Decimal((i * n) / m_min).to_integral_value(rounding = ROUND_CEILING)
         response = send_to_oracle(int(f_3), e, n, c, k, l)
+        interactions += 1
         if response == 1:
             m_min = Decimal((i * n + b) / f_3).to_integral_value(rounding = ROUND_CEILING)
         elif response == 2:
             m_max = Decimal((i * n + b) / f_3).to_integral_value(rounding = ROUND_FLOOR)
-    return int(m_min)
+    return int(m_min), interactions
 
 # https://en.wikipedia.org/wiki/Mask_generation_function#Example_code
 def i2osp(integer):
@@ -108,12 +117,14 @@ def attack():
     n, e, l, c = get_attack_params()
     n_int, e_int, lLength, l_int, k, c_int, b = calc_attack_params_int(n, e, l, c)
 
-    f_1 = step_1(e_int, n_int, c_int, k, l)
-    f_2 = step_2(f_1, n_int, b, e_int, c_int, k, l)
-    em_int = step_3(f_2, n_int, b, e_int, c_int, k, l)
+    f_1, interactions = step_1(e_int, n_int, c_int, k, l)
+    f_2, interactions = step_2(f_1, interactions, n_int, b, e_int, c_int, k, l)
+    em_int, interactions = step_3(f_2, n_int, b, interactions, e_int, c_int, k, l)
 
     m = calc_m_from_em(em_int, k, l_int, lLength)
     print(m.hex())
+    print(interactions)
+    # print(INTERACTIONS)
 
 if __name__ == "__main__":
     attack()
