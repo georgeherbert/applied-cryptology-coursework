@@ -1,0 +1,59 @@
+EME-OAEP encoding
+
+Options:
+	- Hash
+		- SHA-1
+		- Length hLen
+	- MGF
+		- MGF1
+Input:
+	- (n, e)
+		- Not actually used in EME-OAEP process
+		- n is of length k (this is what needs to be known for EME-OAEP encoding)
+	- M
+		- Length mLen where mLen ≤ k - 2hLen - 2
+	- L
+Output:
+	- EM
+		- of length k
+
+EM = 0x00 ||   maskedSeed                                                                             ||     maskedDB
+   = 0x00 || ( seed ⊕ seedMask                                                                      ) || (   DB                                       ⊕ dbMask                     )
+   = 0x00 || ( seed ⊕ MGF1(   maskedDB                                                     , hLen ) ) || ( ( lHash      || PS          || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1 ) )
+   = 0x00 || ( seed ⊕ MGF1(   DB                              ⊕ dbMask                     , hLen ) ) || ( ( SHA-1( L ) || 0x00...0x00 || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1 ) )
+   = 0x00 || ( seed ⊕ MGF1( ( lHash      || PS || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1) , hLen ) ) || ( ( SHA-1( L ) || 0x00...0x00 || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1 ) )
+   = 0x00 || ( seed ⊕ MGF1( ( SHA-1( L ) || PS || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1) , hLen ) ) || ( ( SHA-1( L ) || 0x00...0x00 || 0x01 || M ) ⊕ MGF1( seed , k - hLen - 1 ) )
+
+EME-OAEP decoding
+
+Options:
+	- Hash
+		- SHA-1
+		- Length hLen
+	- MGF
+		- MGF1
+Input:
+	- K
+		- Not actually used in EME-OAEP process
+		- K contains n
+		- n is of length k (this is what needs to be known for EME-OAEP decoding)
+	- EM
+		- Length k where k ≥ 2hLen + 2
+	- L
+Output:
+	- M
+		- Length mLen where mLen ≤ k - 2hLen - 2
+
+
+EM       = Y || maskedSeed || maskedDB
+
+Y        = 0x00
+seedMask = MGF1( maskedDB, hLen)
+seed     = maskedSeed ⊕ seedMask
+dbMask   = MGF1( seed, k - hLen - 1)
+DB       = maskedDB ⊕ dbMask
+         = SHA-1( L ) || 0x00...0x00 || 0x01 || M
+
+Errors:
+	#1 If Y ≠ 0x00
+	#2 If there's no 0x01 between 0x00...0x00 and M
