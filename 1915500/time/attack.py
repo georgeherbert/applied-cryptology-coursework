@@ -74,7 +74,7 @@ def attack():
     # ciphertext_samples = [random.randrange(0, n) for _ in range(1000)]
 
 
-    print(mont_exp(rho_sq, n, 3, 5, l_n, omega))
+    print(mont_exp(rho_sq, n, 1203, 300, l_n, omega))
 
 
 
