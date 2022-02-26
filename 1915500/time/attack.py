@@ -80,7 +80,7 @@ def calc_final_bit(d, e, n):
     c = pow(TEST_MESSAGE, e, n)
     return pow(c, d * 2 + 1, n) == TEST_MESSAGE
 
-def calculate_d(n, rho_sq, l_n, omega, e):
+def calc_d(n, rho_sq, l_n, omega, e):
     ciphertext_samples, ciphertext_times = gen_ciphertext_samples_times(n, INITIAL_SAMPLES)
     interactions = INITIAL_SAMPLES
     ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples]
@@ -113,7 +113,7 @@ def attack():
     l_n, omega, rho_sq = calc_montgomery_params(n)
     print(f"n (base 10): {n}\n\ne (base 10): {e}\n\nl_n (base 10): {l_n}\n\nomega (base 10): {omega}\n\nrho_sq (base 10): {rho_sq}\n")
 
-    d, interactions = calculate_d(n, rho_sq, l_n, omega, e)
+    d, interactions = calc_d(n, rho_sq, l_n, omega, e)
 
     print(f"d (base 2): {d:b}\n")
     print(f"d (base 16): {d:x}\n")
