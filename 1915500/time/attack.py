@@ -57,14 +57,14 @@ def mont_mul(x, y, l_n, omega, n):
     reduction = r >= n
     return r - n if reduction else r, reduction
 
-def square_and_multiply_init(rho_sq, l_n, omega, n, x):
+def mont_exp_init(rho_sq, l_n, omega, n, x):
     t = mont_mul(1, rho_sq, l_n, omega, n)[0]
     t = mont_mul(t, t, l_n, omega, n)[0]
     t = mont_mul(t, x, l_n, omega, n)[0]
     t = mont_mul(t, t, l_n, omega, n)[0]
     return t
 
-def square_and_multiply_next(d_i, t, x, l_n, omega, n):
+def mont_exp_next(d_i, t, x, l_n, omega, n):
     if d_i:
         t = mont_mul(t, x, l_n, omega, n)[0]
     t = mont_mul(t, t, l_n, omega, n)
@@ -84,27 +84,25 @@ def calculate_d(n, rho_sq, l_n, omega, e):
     ciphertext_samples, ciphertext_times = gen_ciphertext_samples_times(n, INITIAL_SAMPLES)
     interactions = INITIAL_SAMPLES
     ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples]
-    m_temps = [square_and_multiply_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
+    m_temps = [mont_exp_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
 
     d = 0x1
     while not test_d(d, e, n):
-        ciphertext_mont_bit_one = [square_and_multiply_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
-        ciphertext_mont_bit_zero = [square_and_multiply_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
+        ciphertext_mont_bit_one = [mont_exp_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
+        ciphertext_mont_bit_zero = [mont_exp_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
         M_1 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if reduction])
         M_2 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if not reduction])
         M_3 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction])
         M_4 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction])
-
         # print(abs(M_1 - M_2))
         # print(abs(M_3 - M_4))
 
         diff = abs(M_1 - M_2) - abs(M_3 - M_4)
         d *= 2
         if diff >= 0:
-            d += 1
             m_temps = [i[0] for i in ciphertext_mont_bit_one]
+            d += 1
         elif diff < 0:
-            d += 0
             m_temps = [i[0] for i in ciphertext_mont_bit_zero]
 
     d = d * 2 + calc_final_bit(d, e, n)
