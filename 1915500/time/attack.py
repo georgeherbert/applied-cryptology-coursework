@@ -16,6 +16,7 @@ W = 64 # Word length
 B = 2 ** W # Base
 
 TEST_MESSAGE = 0x123456789abcdef
+INITIAL_SAMPLES = 5000
 
 def get_attack_params():
     with open(sys.argv[2], "r") as config:
@@ -70,6 +71,7 @@ def square_and_multiply_next(d_i, t, x, l_n, omega, n):
     return t
 
 def test_d(d, e, n):
+    print(f"d (base 2): {d:b}")
     c = pow(TEST_MESSAGE, e, n)
     d *= 2
     return pow(c, d, n) == TEST_MESSAGE or pow(c, d + 1, n) == TEST_MESSAGE
@@ -79,7 +81,8 @@ def calc_final_bit(d, e, n):
     return pow(c, d * 2 + 1, n) == TEST_MESSAGE
 
 def calculate_d(n, rho_sq, l_n, omega, e):
-    ciphertext_samples, ciphertext_times = gen_ciphertext_samples_times(n, 5000)
+    ciphertext_samples, ciphertext_times = gen_ciphertext_samples_times(n, INITIAL_SAMPLES)
+    interactions = INITIAL_SAMPLES
     ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples]
     m_temps = [square_and_multiply_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
 
@@ -92,8 +95,8 @@ def calculate_d(n, rho_sq, l_n, omega, e):
         M_3 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction])
         M_4 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction])
 
-        print(abs(M_1 - M_2))
-        print(abs(M_3 - M_4))
+        # print(abs(M_1 - M_2))
+        # print(abs(M_3 - M_4))
 
         diff = abs(M_1 - M_2) - abs(M_3 - M_4)
         d *= 2
@@ -103,20 +106,22 @@ def calculate_d(n, rho_sq, l_n, omega, e):
         elif diff < 0:
             d += 0
             m_temps = [i[0] for i in ciphertext_mont_bit_zero]
-        print(f"d: {d:b}\n")
 
     d = d * 2 + calc_final_bit(d, e, n)
-    return d
+    return d, interactions
 
 def attack():
     n, e = get_attack_params()
     l_n, omega, rho_sq = get_montgomery_params(n)
-    print(f"n: {n}\n\ne: {e}\n\nl_n: {l_n}\n\nomega: {omega}\n\nrho_sq: {rho_sq}\n\n")
+    print(f"n: {n}\n\ne: {e}\n\nl_n: {l_n}\n\nomega: {omega}\n\nrho_sq: {rho_sq}\n")
 
-    d = calculate_d(n, rho_sq, l_n, omega, e)
+    d, interactions = calculate_d(n, rho_sq, l_n, omega, e)
 
-    print(f"d: {d:b}\n")
-    print(f"d: {d:x}\n")
+    print(f"d (base 2): {d:b}\n")
+    print(f"d (base 16): {d:x}\n")
+    
+    print(d)
+    print(interactions)
 
 if __name__ == "__main__":
     attack()
