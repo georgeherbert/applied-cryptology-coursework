@@ -28,7 +28,7 @@ def mont_omega(n):
         t = (pow(t, 2, B) * n) % B
     return -t % B
 
-def get_montgomery_params(n):
+def calc_montgomery_params(n):
     l_n = math.ceil(math.log(n, B))
     omega = mont_omega(n)
     rho_sq = pow(2, 2 * l_n * W, n)
@@ -110,8 +110,8 @@ def calculate_d(n, rho_sq, l_n, omega, e):
 
 def attack():
     n, e = get_attack_params()
-    l_n, omega, rho_sq = get_montgomery_params(n)
-    print(f"n: {n}\n\ne: {e}\n\nl_n: {l_n}\n\nomega: {omega}\n\nrho_sq: {rho_sq}\n")
+    l_n, omega, rho_sq = calc_montgomery_params(n)
+    print(f"n (base 10): {n}\n\ne (base 10): {e}\n\nl_n (base 10): {l_n}\n\nomega (base 10): {omega}\n\nrho_sq (base 10): {rho_sq}\n")
 
     d, interactions = calculate_d(n, rho_sq, l_n, omega, e)
 
