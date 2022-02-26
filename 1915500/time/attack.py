@@ -2,6 +2,7 @@ import sys
 import subprocess
 import random
 import math
+import statistics
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -18,17 +19,11 @@ def get_attack_params():
     with open(sys.argv[2], "r") as config:
         return [int(config.readline().strip(), 16) for _ in range(2)]
 
-def mpz_size(op):
-    return math.ceil(math.log(op, B))
-
 def mont_omega(n):
     t = 1
     for _ in range(W):
         t = (pow(t, 2, B) * n) % B
     return -t % B
-    
-def mont_rho_sq(n, l_n):
-    return pow(2, 2 * l_n * W, n)
 
 def interact(ciphertext):
     TARGET_IN.write(f"{ciphertext:x}\n".encode())
@@ -54,23 +49,10 @@ def mont_mul(x, y, l_n, omega, n):
         subtraction = True
     return r, subtraction
 
-def mont_exp(rho_sq, n, x, y, l_n, omega):
-    t = mont_mul(1, rho_sq, l_n, omega, n)[0]
-    x = mont_mul(x, rho_sq, l_n, omega, n)[0]
-    y_size = int(math.log(y, 2))
-    for i in range(y_size, -1, -1):
-        t = mont_mul(t, t, l_n, omega, n)[0]
-        if (y >> i) & 1:
-            t = mont_mul(t, x, l_n, omega, n)[0]
-    return mont_mul(t, 1, l_n, omega, n)[0]
-
 def square_and_multiply_init(rho_sq, l_n, omega, n, x):
-    # Conversion of values at the start of mont_exp
     t = mont_mul(1, rho_sq, l_n, omega, n)[0]
-    # First loop round since assuming first bit is 1
     t = mont_mul(t, t, l_n, omega, n)[0]
-    t = mont_mul(t, x, l_n, omega, n)[0] # Assumes first bit is 1
-    # Performs last calculation before checking the bit of the second iteration
+    t = mont_mul(t, x, l_n, omega, n)[0] # First bit is 1
     t = mont_mul(t, t, l_n, omega, n)[0]
     return t
 
@@ -80,20 +62,30 @@ def square_and_multiply_next(d_i, t, x, l_n, omega, n):
     t = mont_mul(t, t, l_n, omega, n)
     return t
 
+def test(d, e, n):
+    m = 0x123456789ABCDEF
+    c = pow(m, e, n)
+    d_zero = d << 1
+    d_one = d_zero + 1
+    if pow(c, d_zero, n) == m:
+        return d_zero
+    elif pow(c, d_one, n) == m:
+        return d_one
+    else:
+        return False
+
 def attack():
     n, e = get_attack_params()
-    l_n = mpz_size(n)
+    l_n = math.ceil(math.log(n, B))
     omega = mont_omega(n)
-    rho_sq = mont_rho_sq(n, l_n)
+    rho_sq = pow(2, 2 * l_n * W, n)
     print(f"n: {n}\n\ne: {e}\n\nl_n: {l_n}\n\nomega: {omega}\n\nrho_sq: {rho_sq}\n\n")
 
-    ciphertext_samples = [random.randrange(0, n) for _ in range(20000)]
+    ciphertext_samples = [random.randrange(0, n) for _ in range(5000)]
     ciphertext_times = [interact(ciphertext)[0] for ciphertext in ciphertext_samples]
     ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples] ## IMPORTANT!
 
-    # d = 0x01
-
-    d = "1"
+    d = 0x1
 
     m_temps = [square_and_multiply_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
 
@@ -101,30 +93,31 @@ def attack():
         ciphertext_mont_bit_one = [square_and_multiply_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
         ciphertext_mont_bit_zero = [square_and_multiply_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
 
-        M_1 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if reduction]
-        M_2 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if not reduction]
-        M_3 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction]
-        M_4 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction]
+        M_1 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if reduction])
+        M_2 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if not reduction])
+        M_3 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction])
+        M_4 = statistics.mean([ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction])
 
-        M_1_mean = sum(M_1) / len(M_1)
-        M_2_mean = sum(M_2) / len(M_2)
-        M_3_mean = sum(M_3) / len(M_3)
-        M_4_mean = sum(M_4) / len(M_4)
+        print(abs(M_1 - M_2))
+        print(abs(M_3 - M_4))
 
-        print(abs(M_1_mean - M_2_mean))
-        print(abs(M_3_mean - M_4_mean))
-
-        diff = abs(M_1_mean - M_2_mean) - abs(M_3_mean - M_4_mean)
-        if diff >= 20:
-            d += "1"
+        diff = abs(M_1 - M_2) - abs(M_3 - M_4)
+        d <<= 1
+        if diff >= 0:
+            d += 1
             m_temps = [i[0] for i in ciphertext_mont_bit_one]
-        elif diff <= -20:
-            d += "0"
+        elif diff < 0:
+            d += 0
             m_temps = [i[0] for i in ciphertext_mont_bit_zero]
-        else:
+
+        d_test = test(d, e, n)
+        if d_test:
             break
 
-        print(f"d: {d}\n")
+        print(f"d: {d:b}\n")
+
+    print(f"d: {d_test:b}\n")
+    print(f"d: {d_test:x}\n")
 
 if __name__ == "__main__":
     attack()
