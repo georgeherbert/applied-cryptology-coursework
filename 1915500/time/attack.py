@@ -87,27 +87,44 @@ def attack():
     rho_sq = mont_rho_sq(n, l_n)
     print(f"n: {n}\n\ne: {e}\n\nl_n: {l_n}\n\nomega: {omega}\n\nrho_sq: {rho_sq}\n\n")
 
-    ciphertext_samples = [random.randrange(0, n) for _ in range(50000)]
+    ciphertext_samples = [random.randrange(0, n) for _ in range(20000)]
     ciphertext_times = [interact(ciphertext)[0] for ciphertext in ciphertext_samples]
     ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples] ## IMPORTANT!
 
+    # d = 0x01
+
+    d = "1"
+
     m_temps = [square_and_multiply_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
-    
-    ciphertext_mont_bit_one = [square_and_multiply_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
-    ciphertext_mont_bit_zero = [square_and_multiply_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
 
-    M_1 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if reduction]
-    M_2 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if not reduction]
-    M_3 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction]
-    M_4 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction]
+    while True:
+        ciphertext_mont_bit_one = [square_and_multiply_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
+        ciphertext_mont_bit_zero = [square_and_multiply_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
 
-    M_1_mean = sum(M_1) / len(M_1)
-    M_2_mean = sum(M_2) / len(M_2)
-    M_3_mean = sum(M_3) / len(M_3)
-    M_4_mean = sum(M_4) / len(M_4)
+        M_1 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if reduction]
+        M_2 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_one) if not reduction]
+        M_3 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if reduction]
+        M_4 = [ciphertext_times[i] for i, (_, reduction) in enumerate(ciphertext_mont_bit_zero) if not reduction]
 
-    print(abs(M_1_mean - M_2_mean))
-    print(abs(M_3_mean - M_4_mean))
+        M_1_mean = sum(M_1) / len(M_1)
+        M_2_mean = sum(M_2) / len(M_2)
+        M_3_mean = sum(M_3) / len(M_3)
+        M_4_mean = sum(M_4) / len(M_4)
+
+        print(abs(M_1_mean - M_2_mean))
+        print(abs(M_3_mean - M_4_mean))
+
+        diff = abs(M_1_mean - M_2_mean) - abs(M_3_mean - M_4_mean)
+        if diff >= 20:
+            d += "1"
+            m_temps = [i[0] for i in ciphertext_mont_bit_one]
+        elif diff <= -20:
+            d += "0"
+            m_temps = [i[0] for i in ciphertext_mont_bit_zero]
+        else:
+            break
+
+        print(f"d: {d}\n")
 
 if __name__ == "__main__":
     attack()
