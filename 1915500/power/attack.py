@@ -1,7 +1,6 @@
 import sys
 import subprocess
 import random
-import numpy as np
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -11,8 +10,8 @@ TARGET = subprocess.Popen(
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
-TRACES = 20
-POWER_SAMPLES = 80000
+TRACES = 50
+POWER_SAMPLES = 10000
 
 # TODO: Combine SBOX and HAMMING_WEIGHT
 S_BOX = [
@@ -97,6 +96,7 @@ def calc_byte(byte, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
+        print(key_byte)
 
     print(max_correlation)
     print(key_guess)
