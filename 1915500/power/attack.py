@@ -11,7 +11,6 @@ TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
 TRACES = 50
-POWER_SAMPLES = 10000
 
 # TODO: Combine SBOX and HAMMING_WEIGHT
 S_BOX = [
@@ -56,18 +55,14 @@ def interact(j, i):
     TARGET_IN.write(f"{j}\n".encode())
     TARGET_IN.write(f"10:{i:0{16 * 2}x}\n".encode())
     TARGET_IN.flush()
-    trace = TARGET_OUT.readline().strip().split(b",")
-    num_samples = int(trace[0])
-    trace = trace[1:]
-    if POWER_SAMPLES < num_samples:
-        trace = [int(trace[i]) for i in range(0, num_samples, num_samples // POWER_SAMPLES)]
+    trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
     message = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
     return trace, message
 
 def get_traces():
     traces = []
     for _ in range(TRACES):
-        i = random.randrange(0, 16777216)
+        i = random.randrange(0, 2 ** 128)
         # Each trace is of the form (sector, power, plaintext)
         traces.append((i, *interact(0, i)))
     return traces
@@ -96,7 +91,7 @@ def calc_byte(byte, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-        print(key_byte)
+        # print(key_byte)
 
     print(max_correlation)
     print(key_guess)
@@ -113,7 +108,7 @@ def calc_key_2(traces):
 
 def attack():
     traces = get_traces()
-
+    
     key_2 = calc_key_2(traces)
 
 if  __name__ == "__main__":
