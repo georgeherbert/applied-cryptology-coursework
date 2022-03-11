@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import random
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -9,18 +10,29 @@ TARGET = subprocess.Popen(
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
+TRACES = 100
+
 def interact(j, i):
     TARGET_IN.write(f"{j}\n".encode())
     TARGET_IN.write(f"10:{i:0{16 * 2}x}\n".encode())
     TARGET_IN.flush()
-    power_consumption = TARGET_OUT.readline().strip()
-    m = TARGET_OUT.readline().strip()
-    return power_consumption, m
+    trace = TARGET_OUT.readline().strip()
+    message = TARGET_OUT.readline().strip()
+    return trace, int(message.split(b":")[1], 16)
+
+def get_traces_messages():
+    traces = []
+    messages = []
+    for _ in range(TRACES):
+        power_consumption, message = interact(0, random.randrange(0, 16777216))
+        traces.append(power_consumption)
+        messages.append(message)
+    return traces, messages
 
 def attack():
-    power_consumption, m = interact(10, 100)
-    print(power_consumption)
-    print(m)
+    traces, messages = get_traces_messages()
+    print(traces)
+    print(messages)
 
 if  __name__ == "__main__":
     attack()
