@@ -11,6 +11,7 @@ TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
 TRACES = 50
+POWER_SAMPLES = 10000
 
 # TODO: Combine SBOX and HAMMING_WEIGHT
 S_BOX = [
@@ -55,9 +56,13 @@ def interact(j, i):
     TARGET_IN.write(f"{j}\n".encode())
     TARGET_IN.write(f"10:{i:0{16 * 2}x}\n".encode())
     TARGET_IN.flush()
-    trace = TARGET_OUT.readline().strip()
-    message = TARGET_OUT.readline().strip()
-    return [int(i) for i in trace.split(b",")][1:], int(message.split(b":")[1], 16)
+    trace = TARGET_OUT.readline().strip().split(b",")
+    num_samples = int(trace[0])
+    trace = trace[1:]
+    if POWER_SAMPLES < num_samples:
+        trace = [int(trace[i]) for i in range(0, num_samples, num_samples // POWER_SAMPLES)]
+    message = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
+    return trace, message
 
 def get_traces():
     traces = []
@@ -68,7 +73,7 @@ def get_traces():
     return traces
 
 def hamming_weight_byte(i_byte):
-    return [HAMMING_WEIGHT[S_BOX[i_byte ^ key_byte]] for key_byte in range(16)]
+    return [HAMMING_WEIGHT[S_BOX[i_byte ^ key_byte]] for key_byte in range(256)]
 
 def extract_byte(num, byte):
     return (num // 256 ** byte & 0xFF)
@@ -81,29 +86,41 @@ def pearsons(x, y):
     denominator = (sum([(x_i - x_mean) ** 2 for x_i in x]) * sum([(y_i - y_mean) ** 2 for y_i in y])) ** (1 / 2)
     return numerator / denominator
 
+def calc_byte(byte, traces):
+    # Extract the Hamming weights of the SUB-BYES(i_b XOR k_2_b) for each of the 16 bytes
+    hamming_weight_matrix = [hamming_weight_byte(extract_byte(sector, byte)) for sector, _, _ in traces]
+
+    # This matrix will hold the Pearson's correlation values
+    correlation_matrix = [[0 for _ in range(len(traces[0][1]))] for _ in range(256)]
+
+    # Correlation matrix has 256 rows (i.e. one for each possible key value)
+    for j in range(256):
+        # Correlation matrix has the same number of columns as the power trace matrix
+        for k in range(len(traces[0][1])):
+            correlation_matrix[j][k] = pearsons([trace[k] for _, trace, _ in traces], [hamming_weight_row[j] for hamming_weight_row in hamming_weight_matrix])
+
+    max_correlation = 0
+    byte_guess = 0
+    for i, row in enumerate(correlation_matrix):
+        if max(row) > max_correlation:
+            max_correlation = max(row)
+            byte_guess = i
+
+    print(max_correlation)
+    print(i)
+
 def calc_key_2(traces):
     key_2 = 0
     # For each byte of the key
     for i in range(1):
-        # Extract the Hamming weights of the SUB-BYES(i_b XOR k_2_b) for each of the 16 bytes
-        hamming_weight_matrix = [hamming_weight_byte(extract_byte(sector, i)) for sector, _, _ in traces]
-        # This matrix will hold the Pearson's correlation values
-        correlation_matrix = [[0 for _ in range(len(traces[0][1]))] for _ in range(16)]
-        
-        # Correlation matrix has 16 rows (i.e. one for each possible key value)
-        for j in range(16):
-            # Correlation matrix has the same number of columns as the power trace matrix
-            for k in range(len(traces[0][1])):
-                correlation_matrix[j][k] = pearsons([trace[k] for _, trace, _ in traces], [hamming_weight_row[j] for hamming_weight_row in hamming_weight_matrix])
-
-        for row in correlation_matrix:
-            print(min(row), max(row))
+        calc_byte(0, traces)
+    
     return
 
 def attack():
     traces = get_traces()
-    # key_1 = calc_key_2(traces)
-    print(pearsons([5,4,3,2,1], [1, 4, 3, 2, 5]))
+
+    key_2 = calc_key_2(traces)
 
 if  __name__ == "__main__":
     attack()
