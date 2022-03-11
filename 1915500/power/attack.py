@@ -1,6 +1,7 @@
 import sys
 import subprocess
 import random
+import numpy as np
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -10,8 +11,8 @@ TARGET = subprocess.Popen(
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
-TRACES = 50
-POWER_SAMPLES = 10000
+TRACES = 20
+POWER_SAMPLES = 80000
 
 # TODO: Combine SBOX and HAMMING_WEIGHT
 S_BOX = [
@@ -72,9 +73,6 @@ def get_traces():
         traces.append((i, *interact(0, i)))
     return traces
 
-def hamming_weight_byte(i_byte):
-    return [HAMMING_WEIGHT[S_BOX[i_byte ^ key_byte]] for key_byte in range(256)]
-
 def extract_byte(num, byte):
     return (num // 256 ** byte & 0xFF)
 
@@ -86,36 +84,32 @@ def pearsons(x, y):
     denominator = (sum([(x_i - x_mean) ** 2 for x_i in x]) * sum([(y_i - y_mean) ** 2 for y_i in y])) ** (1 / 2)
     return numerator / denominator
 
+# TODO: Optimise
+# Only 28 bits of sector have any value
+# Spatial locality not very good. Could probably be improved.
 def calc_byte(byte, traces):
-    # Extract the Hamming weights of the SUB-BYES(i_b XOR k_2_b) for each of the 16 bytes
-    hamming_weight_matrix = [hamming_weight_byte(extract_byte(sector, byte)) for sector, _, _ in traces]
-
-    # This matrix will hold the Pearson's correlation values
-    correlation_matrix = [[0 for _ in range(len(traces[0][1]))] for _ in range(256)]
-
-    # Correlation matrix has 256 rows (i.e. one for each possible key value)
-    for j in range(256):
-        # Correlation matrix has the same number of columns as the power trace matrix
-        for k in range(len(traces[0][1])):
-            correlation_matrix[j][k] = pearsons([trace[k] for _, trace, _ in traces], [hamming_weight_row[j] for hamming_weight_row in hamming_weight_matrix])
-
+    key_guess = 0
     max_correlation = 0
-    byte_guess = 0
-    for i, row in enumerate(correlation_matrix):
-        if max(row) > max_correlation:
-            max_correlation = max(row)
-            byte_guess = i
+    for key_byte in range(256):
+        hamming_matrix_column = [HAMMING_WEIGHT[S_BOX[(extract_byte(sector, byte)) ^ key_byte]] for sector, _, _ in traces]
+        for i in range(len(traces[0][1])):
+            correlation = pearsons([trace[i] for _, trace, _ in traces], hamming_matrix_column)
+            if correlation > max_correlation:
+                max_correlation = correlation
+                key_guess = key_byte
 
     print(max_correlation)
-    print(byte_guess)
+    print(key_guess)
+    return key_guess
 
 def calc_key_2(traces):
     key_2 = 0
     # For each byte of the key
-    for i in range(1):
-        calc_byte(0, traces)
-    
-    return
+    for i in range(16):
+        next_byte = calc_byte(i, traces)
+        key_2 += next_byte * (256 ** i)
+    print(key_2)
+    return key_2
 
 def attack():
     traces = get_traces()
