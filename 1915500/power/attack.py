@@ -107,7 +107,7 @@ def calc_byte(byte, traces):
             byte_guess = i
 
     print(max_correlation)
-    print(i)
+    print(byte_guess)
 
 def calc_key_2(traces):
     key_2 = 0
