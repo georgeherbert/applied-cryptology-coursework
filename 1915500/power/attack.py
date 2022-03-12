@@ -132,6 +132,7 @@ def attack():
     key_2 = calc_key_2(tweaks, traces_start)
     # key_2 = 320877140613514890691378064330247603255
     print(key_2)
+    print(hex(key_2))
     
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
@@ -139,10 +140,12 @@ def attack():
     key_1 = calc_key_1(pps, traces_end)
     # key_1 = 5899976120818012681446097137416914584
     print(key_1)
+    print(hex(key_1))
 
     key = key_1 * (256 ** 16) + key_2
     # key = 2007657839168970153837224255792385420570539747675455109899089218065849877559
     print(key)
+    print(hex(key))
 
 
 
