@@ -1,7 +1,7 @@
 import sys
 import subprocess
 import random
-from multiprocessing import Pool
+from Crypto.Cipher import AES
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -36,7 +36,7 @@ def interact(block, tweak):
     TARGET_IN.write(f"{block}\n".encode())
     TARGET_IN.write(f"10:{tweak:0{16 * 2}x}\n".encode())
     TARGET_IN.flush()
-    trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]][:3000]
+    trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
     plaintext = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
     return trace, plaintext
 
@@ -63,13 +63,14 @@ def pearsons(x, y):
     denominator = (sum([(x_i - x_mean) ** 2 for x_i in x]) * sum([(y_i - y_mean) ** 2 for y_i in y])) ** (1 / 2)
     return numerator / denominator
 
+# TODO: Remove 3000
 def calc_byte(byte, tweaks, traces):
     key_guess = 0
     max_correlation = 0
     for key_byte in range(256):
         hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(tweak, byte) ^ key_byte] for tweak in tweaks]
-        for i in range(len(traces[0])):
-            correlation = pearsons([trace[i] for trace in traces], hamming_matrix_column)
+        for i in range(len(traces[0][:3000])):
+            correlation = pearsons([trace[i] for trace in traces[:3000]], hamming_matrix_column)
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
@@ -81,17 +82,57 @@ def calc_byte(byte, tweaks, traces):
 def calc_key_2(tweaks, traces):
     key_2 = 0
     # For each byte of the key
-    bytes = list(range(16))
     for i in range(16):
         next_byte = calc_byte(i, tweaks, traces)
         key_2 += next_byte * (256 ** i)
     print(key_2)
     return key_2
 
+def calc_ts(key_2, tweaks):
+    ts = []
+    enc = AES.new(key_2.to_bytes(16, byteorder = "big"), AES.MODE_ECB)
+    for tweak in tweaks:
+        tweak_encrypted = enc.encrypt(tweak.to_bytes(16, byteorder = "big"))
+        print(tweak_encrypted)
+        ts.append(tweak_encrypted)
+    return ts
+
+def calc_pps(plaintexts, ts):
+    return [p ^ t for p, t in zip(plaintexts, ts)]
+
+# TODO: Remove -5000
+def calc_byte_2(byte, pps, traces):
+    key_guess = 0
+    max_correlation = 0
+    for key_byte in range(256):
+        hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(pp, byte) ^ key_byte] for pp in pps]
+        for i in range(len(traces[0][-5000:])):
+            correlation = pearsons([trace[i] for trace in traces[-5000:]], hamming_matrix_column)
+            if correlation > max_correlation:
+                max_correlation = correlation
+                key_guess = key_byte
+        # print(key_byte, max_correlation)
+
+    print(key_guess, max_correlation)
+    return key_guess
+
+def calc_key_1(pps, traces):
+    key_1 = 0
+    for i in range(16):
+        next_byte = calc_byte(i, pps, teaces)
+        key_1 += next_byte * (256 ** i)
+    print(key_1)
+    return key_1
+
 def attack():
     tweaks, traces, plaintexts = get_traces()
     
     key_2 = calc_key_2(tweaks, traces)
+    
+    ts = calc_ts(key_2, tweaks)
+    pps = calc_pps(plaintexts, ts)
+
+    key_1 = calc_key_1(pps, traces)
 
 if  __name__ == "__main__":
     attack()
