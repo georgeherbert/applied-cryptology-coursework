@@ -37,20 +37,24 @@ def interact(block, tweak):
     TARGET_IN.write(f"10:{tweak:0{16 * 2}x}\n".encode())
     TARGET_IN.flush()
     trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
+    trace_start = trace[:3000]
+    trace_end = trace[-5000:]
     plaintext = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
-    return trace, plaintext
+    return trace_start, trace_end, plaintext
 
 def get_traces():
     tweaks = []
-    traces = []
+    traces_start = []
+    traces_end = []
     plaintexts = []
     for _ in range(TRACES):
         tweak = random.randrange(0, 2 ** 128)
-        trace, plaintext = interact(0, tweak)
+        trace_start, trace_end, plaintext = interact(0, tweak)
         tweaks.append(tweak)
-        traces.append(trace)
+        traces_start.append(trace_start)
+        traces_end.append(trace_end)
         plaintexts.append(plaintext)
-    return tweaks, traces, plaintexts
+    return tweaks, traces_start, traces_end, plaintexts
 
 def extract_byte(num, byte):
     value = (num >> (8 * byte) & 0xFF)
@@ -69,8 +73,8 @@ def calc_byte(byte, tweaks, traces):
     max_correlation = 0
     for key_byte in range(256):
         hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(tweak, byte) ^ key_byte] for tweak in tweaks]
-        for i in range(len(traces[0][:3000])):
-            correlation = pearsons([trace[i] for trace in traces[:3000]], hamming_matrix_column)
+        for i in range(len(traces[0])):
+            correlation = pearsons([trace[i] for trace in traces], hamming_matrix_column)
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
@@ -109,6 +113,7 @@ def calc_byte_2(byte, pps, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
+        print(key_byte, max_correlation)
 
     print(key_guess, max_correlation)
     return key_guess
@@ -122,15 +127,16 @@ def calc_key_1(pps, traces):
     return key_1
 
 def attack():
-    tweaks, traces, plaintexts = get_traces()
+    tweaks, traces_start, traces_end, plaintexts = get_traces()
     
-    key_2 = calc_key_2(tweaks, traces)
+    # key_2 = calc_key_2(tweaks, traces_start)
+    key_2 = 320877140613514890691378064330247603255
     print(key_2)
     
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
 
-    key_1 = calc_key_1(pps, traces)
+    key_1 = calc_key_1(pps, traces_end)
 
 if  __name__ == "__main__":
     attack()
