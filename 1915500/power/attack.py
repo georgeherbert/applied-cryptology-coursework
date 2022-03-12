@@ -85,16 +85,14 @@ def calc_key_2(tweaks, traces):
     for i in range(16):
         next_byte = calc_byte(i, tweaks, traces)
         key_2 += next_byte * (256 ** i)
-    print(key_2)
     return key_2
 
 def calc_ts(key_2, tweaks):
     ts = []
-    enc = AES.new(key_2.to_bytes(16, byteorder = "big"), AES.MODE_ECB)
+    enc = AES.new(key_2.to_bytes(16, byteorder = "big"))
     for tweak in tweaks:
         tweak_encrypted = enc.encrypt(tweak.to_bytes(16, byteorder = "big"))
-        print(tweak_encrypted)
-        ts.append(tweak_encrypted)
+        ts.append(int.from_bytes(tweak_encrypted, "big"))
     return ts
 
 def calc_pps(plaintexts, ts):
@@ -106,12 +104,11 @@ def calc_byte_2(byte, pps, traces):
     max_correlation = 0
     for key_byte in range(256):
         hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(pp, byte) ^ key_byte] for pp in pps]
-        for i in range(len(traces[0][-5000:])):
-            correlation = pearsons([trace[i] for trace in traces[-5000:]], hamming_matrix_column)
+        for i in range(len(traces[0])):
+            correlation = pearsons([trace[i] for trace in traces], hamming_matrix_column)
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-        # print(key_byte, max_correlation)
 
     print(key_guess, max_correlation)
     return key_guess
@@ -119,7 +116,7 @@ def calc_byte_2(byte, pps, traces):
 def calc_key_1(pps, traces):
     key_1 = 0
     for i in range(16):
-        next_byte = calc_byte(i, pps, teaces)
+        next_byte = calc_byte_2(i, pps, traces)
         key_1 += next_byte * (256 ** i)
     print(key_1)
     return key_1
@@ -128,6 +125,7 @@ def attack():
     tweaks, traces, plaintexts = get_traces()
     
     key_2 = calc_key_2(tweaks, traces)
+    print(key_2)
     
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
