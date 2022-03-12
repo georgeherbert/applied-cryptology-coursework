@@ -38,7 +38,7 @@ def interact(block, tweak):
     TARGET_IN.flush()
     trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
     trace_start = trace[:3000]
-    trace_end = trace[-5000:]
+    trace_end = trace[-3000:]
     plaintext = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
     return trace_start, trace_end, plaintext
 
@@ -113,7 +113,6 @@ def calc_byte_2(byte, pps, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-        print(key_byte, max_correlation)
 
     print(key_guess, max_correlation)
     return key_guess
@@ -123,20 +122,28 @@ def calc_key_1(pps, traces):
     for i in range(16):
         next_byte = calc_byte_2(i, pps, traces)
         key_1 += next_byte * (256 ** i)
+        print(i, hex(next_byte), hex(key_1))
     print(key_1)
     return key_1
 
 def attack():
     tweaks, traces_start, traces_end, plaintexts = get_traces()
     
-    # key_2 = calc_key_2(tweaks, traces_start)
-    key_2 = 320877140613514890691378064330247603255
+    key_2 = calc_key_2(tweaks, traces_start)
+    # key_2 = 320877140613514890691378064330247603255
     print(key_2)
     
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
 
     key_1 = calc_key_1(pps, traces_end)
+    # key_1 = 5899976120818012681446097137416914584
+    print(key_1)
+
+    key = k_2 * (2 ** 16) + k1
+    print(key)
+
+
 
 if  __name__ == "__main__":
     attack()
