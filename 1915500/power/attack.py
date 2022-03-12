@@ -122,7 +122,7 @@ def calc_key_1(pps, traces):
     for i in range(16):
         next_byte = calc_byte_2(i, pps, traces)
         key_1 += next_byte * (256 ** i)
-        print(i, hex(next_byte), hex(key_1))
+        # print(i, hex(next_byte), hex(key_1))
     print(key_1)
     return key_1
 
@@ -140,7 +140,8 @@ def attack():
     # key_1 = 5899976120818012681446097137416914584
     print(key_1)
 
-    key = k_2 * (2 ** 16) + k1
+    key = key_2 * (2 ** 16) + key_1
+    # key = 2007657839168970153837224255792385420570539747675455109899089218065849877559
     print(key)
 
 
