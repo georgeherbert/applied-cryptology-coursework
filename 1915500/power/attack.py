@@ -67,29 +67,26 @@ def pearsons(x, y):
     denominator = (sum([(x_i - x_mean) ** 2 for x_i in x]) * sum([(y_i - y_mean) ** 2 for y_i in y])) ** (1 / 2)
     return numerator / denominator
 
-# TODO: Remove 3000
-def calc_byte(byte, tweaks, traces):
+def calc_byte(byte, tweaks_pps, traces):
     key_guess = 0
     max_correlation = 0
     for key_byte in range(256):
-        hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(tweak, byte) ^ key_byte] for tweak in tweaks]
+        hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(tweak_pp, byte) ^ key_byte] for tweak_pp in tweaks_pps]
         for i in range(len(traces[0])):
             correlation = pearsons([trace[i] for trace in traces], hamming_matrix_column)
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-        # print(key_byte, max_correlation)
-
     print(key_guess, max_correlation)
     return key_guess
 
-def calc_key_2(tweaks, traces):
-    key_2 = 0
+def calc_key(tweaks_pps, traces):
+    key = 0
     # For each byte of the key
     for i in range(16):
-        next_byte = calc_byte(i, tweaks, traces)
-        key_2 += next_byte * (256 ** i)
-    return key_2
+        next_byte = calc_byte(i, tweaks_pps, traces)
+        key += next_byte * (256 ** i)
+    return key
 
 def calc_ts(key_2, tweaks):
     ts = []
@@ -102,34 +99,10 @@ def calc_ts(key_2, tweaks):
 def calc_pps(plaintexts, ts):
     return [p ^ t for p, t in zip(plaintexts, ts)]
 
-# TODO: Remove -5000
-def calc_byte_2(byte, pps, traces):
-    key_guess = 0
-    max_correlation = 0
-    for key_byte in range(256):
-        hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(pp, byte) ^ key_byte] for pp in pps]
-        for i in range(len(traces[0])):
-            correlation = pearsons([trace[i] for trace in traces], hamming_matrix_column)
-            if correlation > max_correlation:
-                max_correlation = correlation
-                key_guess = key_byte
-
-    print(key_guess, max_correlation)
-    return key_guess
-
-def calc_key_1(pps, traces):
-    key_1 = 0
-    for i in range(16):
-        next_byte = calc_byte_2(i, pps, traces)
-        key_1 += next_byte * (256 ** i)
-        # print(i, hex(next_byte), hex(key_1))
-    print(key_1)
-    return key_1
-
 def attack():
     tweaks, traces_start, traces_end, plaintexts = get_traces()
     
-    key_2 = calc_key_2(tweaks, traces_start)
+    key_2 = calc_key(tweaks, traces_start)
     # key_2 = 320877140613514890691378064330247603255
     print(key_2)
     print(hex(key_2))
@@ -137,7 +110,7 @@ def attack():
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
 
-    key_1 = calc_key_1(pps, traces_end)
+    key_1 = calc_key(pps, traces_end)
     # key_1 = 5899976120818012681446097137416914584
     print(key_1)
     print(hex(key_1))
@@ -146,8 +119,6 @@ def attack():
     # key = 2007657839168970153837224255792385420570539747675455109899089218065849877559
     print(key)
     print(hex(key))
-
-
 
 if  __name__ == "__main__":
     attack()
