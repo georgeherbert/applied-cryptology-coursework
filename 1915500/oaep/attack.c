@@ -10,6 +10,16 @@ int attack_raw[2];
 FILE* target_out = NULL;
 FILE* target_in = NULL;
 
+typedef struct {
+    mpz_t modulus;
+    mpz_t public_exponent;
+    mpz_t label;
+    mpz_t ciphertext;
+    long int label_size;
+    long int ciphertext_size;
+    mpz_t b;
+} attack_params;
+
 void interact(int* t, int* r, const char* G) {
     // Send G to attack target.
     fprintf (target_in, "%s\n", G); fflush(target_in);
@@ -18,7 +28,7 @@ void interact(int* t, int* r, const char* G) {
     if (1 != fscanf( target_out, "%d", r)) abort();
 }
 
-void get_attack_params(char config_file[], mpz_t* modulus, mpz_t* public_exponent, mpz_t* label, mpz_t* ciphertext, long int* label_size, long int* ciphertext_size) {
+void get_attack_params(char config_file[], attack_params* attack_params) {
     FILE *file = fopen(config_file, "r");
     char modulus_hex[1024], public_exponent_hex[1024], label_hex[1024], ciphertext_hex[1024];
     char *label_hex_split, *ciphertext_hex_split;
@@ -29,46 +39,38 @@ void get_attack_params(char config_file[], mpz_t* modulus, mpz_t* public_exponen
     fgets(label_hex, sizeof(label_hex), file);
     fgets(ciphertext_hex, sizeof(ciphertext_hex), file);
 
-    mpz_set_str(*modulus, modulus_hex, 16);
-    mpz_set_str(*public_exponent, public_exponent_hex, 16);
+    mpz_set_str(attack_params->modulus, modulus_hex, 16);
+    mpz_set_str(attack_params->public_exponent, public_exponent_hex, 16);
 
     label_hex_split = strtok(label_hex, search);
-    *label_size = strtol(label_hex_split, NULL, 16);
+    attack_params->label_size = strtol(label_hex_split, NULL, 16);
     label_hex_split = strtok(NULL, search);
-    mpz_set_str(*label, label_hex_split, 16);
+    mpz_set_str(attack_params->label, label_hex_split, 16);
 
     ciphertext_hex_split = strtok(ciphertext_hex, search);
-    *ciphertext_size = strtol(ciphertext_hex_split, NULL, 16);
+    attack_params->ciphertext_size = strtol(ciphertext_hex_split, NULL, 16);
     ciphertext_hex_split = strtok(NULL, search);
-    mpz_set_str(*ciphertext, ciphertext_hex_split, 16);
+    mpz_set_str(attack_params->ciphertext, ciphertext_hex_split, 16);
+
+    mpz_ui_pow_ui(attack_params->b, 2, 8 * (attack_params->ciphertext_size - 1));
     
     fclose(file);
 }
 
 void attack(char config_file[]) {
-    mpz_t modulus, public_exponent, label, ciphertext;
-    mpz_init(modulus); mpz_init(public_exponent); mpz_init(label); mpz_init(ciphertext);
-    long int label_size, ciphertext_size;
+    attack_params attack_params;
+    mpz_init(attack_params.modulus); mpz_init(attack_params.public_exponent); mpz_init(attack_params.label); mpz_init(attack_params.ciphertext); mpz_init(attack_params.b);
     
-    get_attack_params(config_file, &modulus, &public_exponent, &label, &ciphertext, &label_size, &ciphertext_size);
+    get_attack_params(config_file, &attack_params);
 
-    gmp_printf("%Zd\n\n", modulus);
-    gmp_printf("%Zd\n\n", public_exponent);
-    gmp_printf("%Zd\n\n", label);
-    gmp_printf("%Zd\n\n", ciphertext);
-    printf("%ld\n\n", label_size);
-    printf("%ld\n\n", ciphertext_size);
+    gmp_printf("%Zd\n\n", attack_params.modulus);
+    gmp_printf("%Zd\n\n", attack_params.public_exponent);
+    gmp_printf("%Zd\n\n", attack_params.label);
+    gmp_printf("%Zd\n\n", attack_params.ciphertext);
+    printf("%ld\n\n", attack_params.label_size);
+    printf("%ld\n\n", attack_params.ciphertext_size);
+    gmp_printf("%Zd\n\n", attack_params.b);
 
-    // // Select a hard-coded guess ...
-    // char* G = "guess";
-    // int t;
-    // int r;
-    // // ... then interact with the attack target.
-    // interact(&t, &r, G);
-    // // Print all of the inputs and outputs.
-    // printf("G = %s\n", G);
-    // printf("t = %d\n", t);
-    // printf("r = %d\n", r);
 }
 
 void cleanup(int s){
