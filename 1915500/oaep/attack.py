@@ -3,6 +3,7 @@ import subprocess
 import math
 from decimal import Decimal, getcontext, ROUND_CEILING, ROUND_FLOOR
 from hashlib import sha1
+import time
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -11,8 +12,6 @@ TARGET = subprocess.Popen(
 )
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
-
-# INTERACTIONS = 0
 
 def get_attack_params():
     with open(sys.argv[2], "r") as config:
@@ -33,8 +32,6 @@ def interact(l, c):
     TARGET_IN.write(f"{l}\n".encode())
     TARGET_IN.write(f"{c}\n".encode())
     TARGET_IN.flush()
-    # global INTERACTIONS
-    # INTERACTIONS += 1
     return int(TARGET_OUT.readline().strip())
 
 def send_to_oracle(f, e, n, c, k, l):
@@ -114,17 +111,23 @@ def calc_m_from_em(em_int, k, l_int, lLength):
     return m
 
 def attack():
+    print("Starting attack...")
+    start = time.time()
     n, e, l, c = get_attack_params()
     n_int, e_int, lLength, l_int, k, c_int, b = calc_attack_params_int(n, e, l, c)
 
     f_1, interactions = step_1(e_int, n_int, c_int, k, l)
+    print("f_1:", f_1)
     f_2, interactions = step_2(f_1, interactions, n_int, b, e_int, c_int, k, l)
+    print("f_2:", f_2)
     em_int, interactions = step_3(f_2, n_int, b, interactions, e_int, c_int, k, l)
 
     m = calc_m_from_em(em_int, k, l_int, lLength)
-    print(m.hex())
-    print(interactions)
-    # print(INTERACTIONS)
+    stop = time.time()
+    print("Attack complete")
+    print("Attack time:", stop - start, "seconds")
+    print("Target material (base 16):", m.hex())
+    print("Interactions with device (base 10):", interactions)
 
 if __name__ == "__main__":
     attack()
