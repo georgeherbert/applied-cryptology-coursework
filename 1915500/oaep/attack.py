@@ -123,6 +123,7 @@ def attack():
     em_int, interactions = step_3(f_2, n_int, b, interactions, e_int, c_int, k, l)
 
     m = calc_m_from_em(em_int, k, l_int, lLength)
+    # m = 0x10219ac029e1c1c22028f7ecf1b3de757830df8e68b0b78488ea8c9efdeb38
     stop = time.time()
     print("Attack complete")
     print("Attack time:", stop - start, "seconds")
