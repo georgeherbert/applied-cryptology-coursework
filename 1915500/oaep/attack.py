@@ -83,6 +83,7 @@ def mgf1(input_str, length):
     while len(output) < length:
         C = i2osp(counter)
         output += sha1(input_str + C).digest()
+        print("\n", (input_str + C).hex(), "\n")
         counter += 1
     return output[:length]
 
@@ -105,16 +106,18 @@ def calc_m_from_em(em_int, k, l_int, lLength):
     lhash_ = db[:20]
     assert lhash_ == lhash, "lHash' must equal lHash"
 
-    print("encoded_message:", em.hex())
-    print("masked_seed:", masked_seed.hex())
-    print("masked_db:", masked_db.hex())
-    print("seed_mask:", seed_mask.hex())
-    print("db_mask:", db_mask.hex())
-    print("seed:", seed.hex())
-    print("db:", db.hex())
-    print("lhash:", lhash.hex())
+    # print("encoded_message:", em.hex())
+    # print("masked_seed:", masked_seed.hex())
+    # print("masked_db:", masked_db.hex())
+    # print("seed_mask:", seed_mask.hex())
+    # print("db_mask:", db_mask.hex())
+    # print("seed:", seed.hex())
+    # print("db:", db.hex())
+    # print("lhash:", lhash.hex())
 
     m = db[db.index(0x01) + 1:]
+
+    print("message:", m.hex())
 
     return m
 

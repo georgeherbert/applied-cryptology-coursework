@@ -164,103 +164,78 @@ void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encod
     }
 }
 
-void mgf1(unsigned char* input, int input_length, unsigned char* output, int output_length) {
+void mgf1(unsigned char* input, unsigned char* output, const unsigned int input_length, const unsigned int output_length) {
     unsigned char temp[input_length + 4];
 
-    int counter = 0;
-    for (int i = 0; i < output_length; i += 20) {
-        memcpy(temp, input, input_length);
-        memcpy(temp + input_length, &counter, 4);
+    unsigned int size_of_temp_2;
+    unsigned int remainder = output_length % 20;
+    if (remainder == 0) size_of_temp_2 = output_length;
+    else size_of_temp_2 = output_length + 20 - remainder;
+    unsigned char temp_2[size_of_temp_2];
 
-        SHA1(temp, input_length + 4, output + i);
-        counter++;
+    memcpy(temp, input, input_length);
+    for (unsigned int counter = 0; counter <= ((output_length - 1) / 20); counter += 1) {
+        unsigned char counter_byte_1 = counter >> 24 & 0xFF;
+        unsigned char counter_byte_2 = counter >> 16 & 0xFF;
+        unsigned char counter_byte_3 = counter >> 8 & 0xFF;
+        unsigned char counter_byte_4 = counter & 0xFF;
+
+        memcpy(temp + input_length, &counter_byte_1, 1);
+        memcpy(temp + input_length + 1, &counter_byte_2, 1);
+        memcpy(temp + input_length + 2, &counter_byte_3, 1);
+        memcpy(temp + input_length + 3, &counter_byte_4, 1);
+
+        SHA1(temp, input_length + 4, temp_2 + counter * 20);
     }
+    memcpy(output, temp_2, output_length);
 }
 
-void xor(unsigned char* x, unsigned char* y, unsigned char* output, int length) {
+void xor(const unsigned char* x, const unsigned char* y, unsigned char* output, const unsigned int length) {
     for (int i = 0; i < length; i++) {
         output[i] = x[i] ^ y[i];
     }
+}
+
+int find_message_index(const unsigned char* db, const unsigned int size) {
+    for (int i = 0; i < size; i++) {
+        if (db[i] == 0x01) return i + 1;
+    }
+    return -1;
 }
 
 void decode(params* params, mpz_t* encoded_message) {
     unsigned char encoded_message_hex[params->ciphertext_size];
     mpz_t_to_bytes(params, encoded_message, encoded_message_hex);
 
-    unsigned char masked_seed[20], masked_db[params->ciphertext_size - 21], seed_mask[20], db_mask[params->ciphertext_size - 21], seed[params->ciphertext_size - 21], db[params->ciphertext_size - 21], lhash[20], lhash_[20];
-    memcpy(masked_seed, encoded_message_hex + 1, 20);
-    memcpy(masked_db, encoded_message_hex + 21, params->ciphertext_size - 21);
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
-    }
+    const unsigned int remainder_size = params->ciphertext_size - 21;
 
-    mgf1(masked_db, params->ciphertext_size - 21, seed_mask, 20);
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
-    }
+    unsigned char masked_seed[20], seed_mask[20], seed[20];
+    unsigned char masked_db[remainder_size], db_mask[remainder_size], db[remainder_size];
+    unsigned char lhash[20], lhash_[20];
+
+    memcpy(masked_seed, encoded_message_hex + 1, 20);
+    memcpy(masked_db, encoded_message_hex + 21, remainder_size);
+
+    mgf1(masked_db, seed_mask, remainder_size, 20);
     xor(masked_seed, seed_mask, seed, 20);
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
-    }
-    mgf1(seed, 20, db_mask, params->ciphertext_size - 21);
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
-    }
-    xor(masked_db, db_mask, db, params->ciphertext_size - 21);
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
-    }
+    mgf1(seed, db_mask, 20, remainder_size);
+    xor(masked_db, db_mask, db, remainder_size);
 
     unsigned char label_bytes[params->label_size];
     mpz_export(label_bytes, NULL, 1, sizeof(char), -1, 0, params->label);
     SHA1(label_bytes, params->label_size, lhash);
     memcpy(lhash_, db, 20);
 
-    // printf("\encoded_message: ");
-    // for (int i = 0; i < 128; i++) {
-    //     printf("%02x", encoded_message_hex[i]);
-    // }
-    // printf("\nmasked_seed: ");
-    // for (int i = 0; i < 20; i++) {
-    //     printf("%02x", masked_seed[i]);
-    // }
-    printf("\nmasked_db: ");
-    for (int i = 0; i < params->ciphertext_size - 21; i++) {
-        printf("%02x", masked_db[i]);
+    const int message_index = find_message_index(db, remainder_size);
+
+    const int message_size = remainder_size - message_index;
+    unsigned char message[message_size];
+    memcpy(message, db + message_index, message_size);
+
+    printf("\n");
+    for (int i = 0; i < message_size; i++) {
+        printf("%x", message[i]);
     }
-    // printf("\nseed_mask: ");
-    // for (int i = 0; i < 20; i++) {
-    //     printf("%02x", seed_mask[i]);
-    // }
-    // printf("\ndb_mask: ");
-    // for (int i = 0; i < params->ciphertext_size - 21; i++) {
-    //     printf("%02x", db_mask[i]);
-    // }
-    // printf("\nseed: ");
-    // for (int i = 0; i < 20; i++) {
-    //     printf("%02x", seed[i]);
-    // }
-    // printf("\ndb: ");
-    // for (int i = 0; i < params->ciphertext_size - 21; i++) {
-    //     printf("%02x", db[i]);
-    // }
-    // printf("\nLabel: ");
-    // for (int i = 0; i < params->label_size; i++) {
-    //     printf("%02x", label_bytes[i]);
-    // }
-    // printf("\nlhash: ");
-    // for (int i = 0; i < 20; i++) {
-    //     printf("%02x", lhash[i]);
-    // }
-    // printf("\nlhash_: ");
-    // for (int i = 0; i < 20; i++) {
-    //     printf("%02x", lhash_[i]);
-    // }
 
 }
 
@@ -315,4 +290,4 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// TODO: Add leading zeros if value is not 128 bytes
+// TODO: Change lots of the ints to unsigned ints to prevent overflow
