@@ -151,9 +151,122 @@ void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
     mpz_set(*encoded_message, message_min);
 }
 
+void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encoded_message_hex) {
+    size_t size;
+    mpz_export(encoded_message_hex, &size, 1, sizeof(char), -1, 0, *encoded_message);
+
+    int to_shift = params->ciphertext_size - size;
+    for (int i = params->ciphertext_size - 1; i >= to_shift; i--) {
+        encoded_message_hex[i] = encoded_message_hex[i - to_shift];
+    }
+    for (int i = 0; i < to_shift; i++) {
+        encoded_message_hex[i] = 0;
+    }
+}
+
+void mgf1(unsigned char* input, int input_length, unsigned char* output, int output_length) {
+    unsigned char temp[input_length + 4];
+
+    int counter = 0;
+    for (int i = 0; i < output_length; i += 20) {
+        memcpy(temp, input, input_length);
+        memcpy(temp + input_length, &counter, 4);
+
+        SHA1(temp, input_length + 4, output + i);
+        counter++;
+    }
+}
+
+void xor(unsigned char* x, unsigned char* y, unsigned char* output, int length) {
+    for (int i = 0; i < length; i++) {
+        output[i] = x[i] ^ y[i];
+    }
+}
+
+void decode(params* params, mpz_t* encoded_message) {
+    unsigned char encoded_message_hex[params->ciphertext_size];
+    mpz_t_to_bytes(params, encoded_message, encoded_message_hex);
+
+    unsigned char masked_seed[20], masked_db[params->ciphertext_size - 21], seed_mask[20], db_mask[params->ciphertext_size - 21], seed[params->ciphertext_size - 21], db[params->ciphertext_size - 21], lhash[20], lhash_[20];
+    memcpy(masked_seed, encoded_message_hex + 1, 20);
+    memcpy(masked_db, encoded_message_hex + 21, params->ciphertext_size - 21);
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+
+    mgf1(masked_db, params->ciphertext_size - 21, seed_mask, 20);
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+    xor(masked_seed, seed_mask, seed, 20);
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+    mgf1(seed, 20, db_mask, params->ciphertext_size - 21);
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+    xor(masked_db, db_mask, db, params->ciphertext_size - 21);
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+
+    unsigned char label_bytes[params->label_size];
+    mpz_export(label_bytes, NULL, 1, sizeof(char), -1, 0, params->label);
+    SHA1(label_bytes, params->label_size, lhash);
+    memcpy(lhash_, db, 20);
+
+    // printf("\encoded_message: ");
+    // for (int i = 0; i < 128; i++) {
+    //     printf("%02x", encoded_message_hex[i]);
+    // }
+    // printf("\nmasked_seed: ");
+    // for (int i = 0; i < 20; i++) {
+    //     printf("%02x", masked_seed[i]);
+    // }
+    printf("\nmasked_db: ");
+    for (int i = 0; i < params->ciphertext_size - 21; i++) {
+        printf("%02x", masked_db[i]);
+    }
+    // printf("\nseed_mask: ");
+    // for (int i = 0; i < 20; i++) {
+    //     printf("%02x", seed_mask[i]);
+    // }
+    // printf("\ndb_mask: ");
+    // for (int i = 0; i < params->ciphertext_size - 21; i++) {
+    //     printf("%02x", db_mask[i]);
+    // }
+    // printf("\nseed: ");
+    // for (int i = 0; i < 20; i++) {
+    //     printf("%02x", seed[i]);
+    // }
+    // printf("\ndb: ");
+    // for (int i = 0; i < params->ciphertext_size - 21; i++) {
+    //     printf("%02x", db[i]);
+    // }
+    // printf("\nLabel: ");
+    // for (int i = 0; i < params->label_size; i++) {
+    //     printf("%02x", label_bytes[i]);
+    // }
+    // printf("\nlhash: ");
+    // for (int i = 0; i < 20; i++) {
+    //     printf("%02x", lhash[i]);
+    // }
+    // printf("\nlhash_: ");
+    // for (int i = 0; i < 20; i++) {
+    //     printf("%02x", lhash_[i]);
+    // }
+
+}
+
 void attack(char config_file[]) {
     params params;
-    mpz_t f_1, f_2, encoded_message;
+    mpz_t f_1, f_2, encoded_message, message;
     
     get_params(config_file, &params);
 
@@ -173,6 +286,8 @@ void attack(char config_file[]) {
     gmp_printf("f_2: %Zd\n", f_2);
     step_3(&params, &f_2, &encoded_message);
     gmp_printf("Encoded message: %Zd\n", encoded_message);
+    decode(&params, &encoded_message);
+    gmp_printf("Message: %Zd\n", message);
 }
  
 int main(int argc, char* argv[]) {

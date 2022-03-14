@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <gmp.h>
-
 #include <unistd.h>
+#include <openssl/sha.h>
+#include <gmp.h>
 
 #endif
 

@@ -100,11 +100,19 @@ def calc_m_from_em(em_int, k, l_int, lLength):
     seed = xor(masked_seed, seed_mask)
     db_mask = mgf1(seed, k - 21)
     db = xor(masked_db, db_mask)
-    # print(db.hex())
 
     lhash = sha1(l_int.to_bytes(lLength, byteorder = "big")).digest()
     lhash_ = db[:20]
     assert lhash_ == lhash, "lHash' must equal lHash"
+
+    print("encoded_message:", em.hex())
+    print("masked_seed:", masked_seed.hex())
+    print("masked_db:", masked_db.hex())
+    print("seed_mask:", seed_mask.hex())
+    print("db_mask:", db_mask.hex())
+    print("seed:", seed.hex())
+    print("db:", db.hex())
+    print("lhash:", lhash.hex())
 
     m = db[db.index(0x01) + 1:]
 
