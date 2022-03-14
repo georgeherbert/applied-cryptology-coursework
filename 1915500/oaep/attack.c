@@ -44,6 +44,8 @@ void get_params(char config_file[], params* params) {
     fgets(label_hex, sizeof(label_hex), file);
     fgets(ciphertext_hex, sizeof(ciphertext_hex), file);
 
+    mpz_inits(params->modulus, params->public_exponent, params->label, params->ciphertext, params->b, NULL);
+
     mpz_set_str(params->modulus, modulus_hex, 16);
     mpz_set_str(params->public_exponent, public_exponent_hex, 16);
 
@@ -107,7 +109,7 @@ void step_1(params* params, mpz_t* f_1) {
 
 void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
     mpz_t temp, temp_2;
-    mpz_inits(temp, temp_2, NULL);
+    mpz_inits(*f_2, temp, temp_2, NULL);
     mpz_add(temp, params->modulus, params->b);
     mpz_fdiv_q(temp, temp, params->b);
     mpz_fdiv_q_ui(temp_2, *f_1, 2);
@@ -118,10 +120,40 @@ void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
     }
 }
 
+void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
+    mpz_t message_min, message_max, f_tmp, i, f_3, temp, temp_2;
+    mpz_inits(*encoded_message, message_min, message_max, f_tmp, i, f_3, temp, temp_2, NULL);
+    
+    mpz_cdiv_q(message_min, params->modulus, *f_2);
+    mpz_add(temp, params->modulus, params->b);
+    mpz_fdiv_q(message_max, temp, *f_2);
+
+    while (mpz_cmp(message_min, message_max)) {
+        // gmp_printf("%Zd %Zd\n", message_min, message_max);
+        mpz_mul_ui(temp, params->b, 2);
+        mpz_sub(temp_2, message_max, message_min);
+        mpz_fdiv_q(f_tmp, temp, temp_2);
+
+        mpz_mul(temp, f_tmp, message_min);
+        mpz_fdiv_q(i, temp, params->modulus);
+
+        mpz_mul(temp, i, params->modulus);
+        mpz_cdiv_q(f_3, temp, message_min);
+
+        mpz_add(temp, temp, params->b);
+        if (send_to_oracle(&f_3, params) == 1) {
+            mpz_cdiv_q(message_min, temp, f_3);
+        }
+        else {
+            mpz_fdiv_q(message_max, temp, f_3);
+        }
+    }
+    mpz_set(*encoded_message, message_min);
+}
+
 void attack(char config_file[]) {
     params params;
-    mpz_t f_1, f_2;
-    mpz_inits(params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
+    mpz_t f_1, f_2, encoded_message;
     
     get_params(config_file, &params);
 
@@ -139,6 +171,8 @@ void attack(char config_file[]) {
     gmp_printf("f_1: %Zd\n", f_1);
     step_2(&params, &f_1, &f_2);
     gmp_printf("f_2: %Zd\n", f_2);
+    step_3(&params, &f_2, &encoded_message);
+    gmp_printf("Encoded message: %Zd\n", encoded_message);
 }
  
 int main(int argc, char* argv[]) {

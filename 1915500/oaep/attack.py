@@ -52,7 +52,6 @@ def step_2(f_1, interactions, n, b, e, c, k, l):
     interactions += 1
     while send_to_oracle(f_2, e, n, c, k, l) != 2:
         f_2 += int(f_1 / 2)
-        print(f_2)
         interactions += 1
     return f_2, interactions
 
