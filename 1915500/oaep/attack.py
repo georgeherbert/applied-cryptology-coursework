@@ -83,7 +83,6 @@ def mgf1(input_str, length):
     while len(output) < length:
         C = i2osp(counter)
         output += sha1(input_str + C).digest()
-        print("\n", (input_str + C).hex(), "\n")
         counter += 1
     return output[:length]
 
@@ -92,7 +91,6 @@ def xor(x, y):
 
 def calc_m_from_em(em_int, k, l_int, lLength):
     em = int(em_int).to_bytes(k, byteorder = "big")
-    # print(em.hex())
     assert em[0] == 0x00, "Y must equal 0x00"
 
     masked_seed = em[1:21]
@@ -102,42 +100,34 @@ def calc_m_from_em(em_int, k, l_int, lLength):
     db_mask = mgf1(seed, k - 21)
     db = xor(masked_db, db_mask)
 
+    # print(db.hex())
+
     lhash = sha1(l_int.to_bytes(lLength, byteorder = "big")).digest()
     lhash_ = db[:20]
     assert lhash_ == lhash, "lHash' must equal lHash"
 
-    # print("encoded_message:", em.hex())
-    # print("masked_seed:", masked_seed.hex())
-    # print("masked_db:", masked_db.hex())
-    # print("seed_mask:", seed_mask.hex())
-    # print("db_mask:", db_mask.hex())
-    # print("seed:", seed.hex())
-    # print("db:", db.hex())
-    # print("lhash:", lhash.hex())
-
     m = db[db.index(0x01) + 1:]
-
-    print("message:", m.hex())
 
     return m
 
 def attack():
-    print("Starting attack...")
     start = time.time()
     n, e, l, c = get_attack_params()
     n_int, e_int, lLength, l_int, k, c_int, b = calc_attack_params_int(n, e, l, c)
 
     f_1, interactions = step_1(e_int, n_int, c_int, k, l)
-    print("f_1:", f_1)
+    print("f_1 (base 10):", f_1)
     f_2, interactions = step_2(f_1, interactions, n_int, b, e_int, c_int, k, l)
-    print("f_2:", f_2)
+    print("f_2 (base 10):", f_2)
     em_int, interactions = step_3(f_2, n_int, b, interactions, e_int, c_int, k, l)
+    print("Encoded message (base 10):", em_int)
 
     m = calc_m_from_em(em_int, k, l_int, lLength)
     # m = 0x10219ac029e1c1c22028f7ecf1b3de757830df8e68b0b78488ea8c9efdeb38
     stop = time.time()
-    print("Attack complete")
-    print("Attack time:", stop - start, "seconds")
+    print("\nAttack complete")
+    print("Time taken:", stop - start, "seconds")
+    print("Target material (base 10):", int.from_bytes(m, byteorder = "big"))
     print("Target material (base 16):", m.hex())
     print("Interactions with device (base 10):", interactions)
 

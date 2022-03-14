@@ -14,12 +14,13 @@ typedef struct {
     mpz_t modulus;
     mpz_t public_exponent;
     mpz_t label;
-    char *label_hex;
-    long int label_size;
+    char *label_bytes;
+    unsigned long long int label_size;
     mpz_t ciphertext;
-    long int ciphertext_size;
-    char *ciphertext_size_hex;
+    unsigned long long int ciphertext_size;
+    char *ciphertext_size_bytes;
     mpz_t b;
+    unsigned long long int interactions;
 } params;
 
 void cleanup(int s){
@@ -33,36 +34,36 @@ void cleanup(int s){
     exit(1); 
 }
 
-void get_params(char config_file[], params* params) {
+void get_params(const char *config_file, params* params) {
     FILE *file = fopen(config_file, "r");
-    char modulus_hex[1024], public_exponent_hex[1024], label_hex[1024], ciphertext_hex[1024];
-    char *label_hex_split, *ciphertext_hex_split;
+    char modulus_bytes[65536], public_exponent_bytes[65536], label_bytes[65536], ciphertext_bytes[65536];
+    char *label_bytes_split, *ciphertext_bytes_split;
     char *search = ":";
 
-    fgets(modulus_hex, sizeof(modulus_hex), file);
-    fgets(public_exponent_hex, sizeof(public_exponent_hex), file);
-    fgets(label_hex, sizeof(label_hex), file);
-    fgets(ciphertext_hex, sizeof(ciphertext_hex), file);
+    fgets(modulus_bytes, sizeof(modulus_bytes), file);
+    fgets(public_exponent_bytes, sizeof(public_exponent_bytes), file);
+    fgets(label_bytes, sizeof(label_bytes), file);
+    fgets(ciphertext_bytes, sizeof(ciphertext_bytes), file);
 
     mpz_inits(params->modulus, params->public_exponent, params->label, params->ciphertext, params->b, NULL);
 
-    mpz_set_str(params->modulus, modulus_hex, 16);
-    mpz_set_str(params->public_exponent, public_exponent_hex, 16);
+    mpz_set_str(params->modulus, modulus_bytes, 16);
+    mpz_set_str(params->public_exponent, public_exponent_bytes, 16);
 
-    label_hex[strcspn(label_hex, "\n")] = 0;
-    params->label_hex = malloc(strlen(label_hex) + 1);
-    strcpy(params->label_hex, label_hex);
-    label_hex_split = strtok(label_hex, search);
-    params->label_size = strtol(label_hex_split, NULL, 16);
-    label_hex_split = strtok(NULL, search);
-    mpz_set_str(params->label, label_hex_split, 16);
+    label_bytes[strcspn(label_bytes, "\n")] = 0;
+    params->label_bytes = malloc(strlen(label_bytes) + 1);
+    strcpy(params->label_bytes, label_bytes);
+    label_bytes_split = strtok(label_bytes, search);
+    params->label_size = strtol(label_bytes_split, NULL, 16);
+    label_bytes_split = strtok(NULL, search);
+    mpz_set_str(params->label, label_bytes_split, 16);
 
-    ciphertext_hex_split = strtok(ciphertext_hex, search);
-    params->ciphertext_size_hex = malloc(strlen(ciphertext_hex_split) + 1);
-    strcpy(params->ciphertext_size_hex, ciphertext_hex_split);
-    params->ciphertext_size = strtol(ciphertext_hex_split, NULL, 16);
-    ciphertext_hex_split = strtok(NULL, search);
-    mpz_set_str(params->ciphertext, ciphertext_hex_split, 16);
+    ciphertext_bytes_split = strtok(ciphertext_bytes, search);
+    params->ciphertext_size_bytes = malloc(strlen(ciphertext_bytes_split) + 1);
+    strcpy(params->ciphertext_size_bytes, ciphertext_bytes_split);
+    params->ciphertext_size = strtol(ciphertext_bytes_split, NULL, 16);
+    ciphertext_bytes_split = strtok(NULL, search);
+    mpz_set_str(params->ciphertext, ciphertext_bytes_split, 16);
 
     mpz_ui_pow_ui(params->b, 2, 8 * (params->ciphertext_size - 1));
     
@@ -70,15 +71,14 @@ void get_params(char config_file[], params* params) {
 }
 
 void interact(int* error_code, const char* value, params* params) {
-    // printf("%s\n", params->label_hex);
-    // printf("%s:%s\n", params->ciphertext_size_hex, value);
-    fprintf(target_in, "%s\n", params->label_hex);
-    fprintf(target_in, "%s:%s\n", params->ciphertext_size_hex, value);
+    params->interactions += 1;
+    fprintf(target_in, "%s\n", params->label_bytes);
+    fprintf(target_in, "%s:%s\n", params->ciphertext_size_bytes, value);
     fflush(target_in);
-    if (1 != fscanf(target_out, "%d", error_code)) abort();
+    fscanf(target_out, "%d", error_code);
 }
 
-void prepend_zeros(char *dest, const char *src, int width) {
+void prepend_zeros(char *dest, const char *src, const unsigned long long int width) {
     size_t len = strlen(src);
     if (len >= width) strcpy(dest, src);
     else sprintf(dest, "%0*d%s", (int) (width - len), 0, src);
@@ -91,11 +91,11 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_mul(value, value, params->ciphertext);
     mpz_mod(value, value, params->modulus);
 
-    char value_hex[params->ciphertext_size * 2 + 1];
-    prepend_zeros(value_hex, mpz_get_str(NULL, 16, value), params->ciphertext_size * 2);
+    char value_bytes[params->ciphertext_size * 2 + 1];
+    prepend_zeros(value_bytes, mpz_get_str(NULL, 16, value), params->ciphertext_size * 2);
 
     int error_code;
-    interact(&error_code, value_hex, params);
+    interact(&error_code, value_bytes, params);
     // printf("Error code: %d\n", error_code);
     return error_code;
 }
@@ -151,30 +151,30 @@ void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
     mpz_set(*encoded_message, message_min);
 }
 
-void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encoded_message_hex) {
+void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encoded_message_bytes) {
     size_t size;
-    mpz_export(encoded_message_hex, &size, 1, sizeof(char), -1, 0, *encoded_message);
+    mpz_export(encoded_message_bytes, &size, 1, sizeof(char), -1, 0, *encoded_message);
 
-    int to_shift = params->ciphertext_size - size;
-    for (int i = params->ciphertext_size - 1; i >= to_shift; i--) {
-        encoded_message_hex[i] = encoded_message_hex[i - to_shift];
+    const unsigned long long to_shift = params->ciphertext_size - size;
+    for (unsigned long long int i = params->ciphertext_size - 1; i >= to_shift; i--) {
+        encoded_message_bytes[i] = encoded_message_bytes[i - to_shift];
     }
-    for (int i = 0; i < to_shift; i++) {
-        encoded_message_hex[i] = 0;
+    for (unsigned long long int i = 0; i < to_shift; i++) {
+        encoded_message_bytes[i] = 0;
     }
 }
 
-void mgf1(unsigned char* input, unsigned char* output, const unsigned int input_length, const unsigned int output_length) {
+void mgf1(unsigned char* input, unsigned char* output, const unsigned long long int input_length, const unsigned long long int output_length) {
     unsigned char temp[input_length + 4];
 
-    unsigned int size_of_temp_2;
-    unsigned int remainder = output_length % 20;
+    unsigned long long int size_of_temp_2;
+    unsigned long long int remainder = output_length % 20;
     if (remainder == 0) size_of_temp_2 = output_length;
     else size_of_temp_2 = output_length + 20 - remainder;
     unsigned char temp_2[size_of_temp_2];
 
     memcpy(temp, input, input_length);
-    for (unsigned int counter = 0; counter <= ((output_length - 1) / 20); counter += 1) {
+    for (unsigned long long int counter = 0; counter <= ((output_length - 1) / 20); counter += 1) {
         unsigned char counter_byte_1 = counter >> 24 & 0xFF;
         unsigned char counter_byte_2 = counter >> 16 & 0xFF;
         unsigned char counter_byte_3 = counter >> 8 & 0xFF;
@@ -190,31 +190,31 @@ void mgf1(unsigned char* input, unsigned char* output, const unsigned int input_
     memcpy(output, temp_2, output_length);
 }
 
-void xor(const unsigned char* x, const unsigned char* y, unsigned char* output, const unsigned int length) {
-    for (int i = 0; i < length; i++) {
-        output[i] = x[i] ^ y[i];
+void xor(const unsigned char* src_x, const unsigned char* src_y, unsigned char* dest, const unsigned long long int size) {
+    for (unsigned long long int i = 0; i < size; i++) {
+        dest[i] = src_x[i] ^ src_y[i];
     }
 }
 
-int find_message_index(const unsigned char* db, const unsigned int size) {
+int find_message_index(const unsigned char* db, const unsigned long long int size) {
     for (int i = 0; i < size; i++) {
         if (db[i] == 0x01) return i + 1;
     }
     return -1;
 }
 
-void decode(params* params, mpz_t* encoded_message) {
-    unsigned char encoded_message_hex[params->ciphertext_size];
-    mpz_t_to_bytes(params, encoded_message, encoded_message_hex);
+void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
+    unsigned char encoded_message_bytes[params->ciphertext_size];
+    mpz_t_to_bytes(params, encoded_message, encoded_message_bytes);
 
-    const unsigned int remainder_size = params->ciphertext_size - 21;
+    const unsigned long long int remainder_size = params->ciphertext_size - 21;
 
     unsigned char masked_seed[20], seed_mask[20], seed[20];
     unsigned char masked_db[remainder_size], db_mask[remainder_size], db[remainder_size];
     unsigned char lhash[20], lhash_[20];
 
-    memcpy(masked_seed, encoded_message_hex + 1, 20);
-    memcpy(masked_db, encoded_message_hex + 21, remainder_size);
+    memcpy(masked_seed, encoded_message_bytes + 1, 20);
+    memcpy(masked_db, encoded_message_bytes + 21, remainder_size);
 
     mgf1(masked_db, seed_mask, remainder_size, 20);
     xor(masked_seed, seed_mask, seed, 20);
@@ -229,40 +229,33 @@ void decode(params* params, mpz_t* encoded_message) {
     const int message_index = find_message_index(db, remainder_size);
 
     const int message_size = remainder_size - message_index;
-    unsigned char message[message_size];
-    memcpy(message, db + message_index, message_size);
+    unsigned char message_bytes[message_size];
+    memcpy(message_bytes, db + message_index, message_size);
 
-    printf("\n");
-    for (int i = 0; i < message_size; i++) {
-        printf("%x", message[i]);
-    }
-
+    mpz_init(*message);
+    mpz_import(*message, message_size, 1, sizeof(char), -1, 0, message_bytes);
 }
 
-void attack(char config_file[]) {
+void attack(const char *config_file) {
+    clock_t tic = clock();
     params params;
     mpz_t f_1, f_2, encoded_message, message;
-    
+
+    params.interactions = 0;
     get_params(config_file, &params);
 
-    // gmp_printf("%Zd\n\n", params.modulus);
-    // gmp_printf("%Zd\n\n", params.public_exponent);
-    // gmp_printf("%Zd\n\n", params.label);
-    // gmp_printf("%s\n\n", params.label_hex);
-    // printf("%ld\n\n", params.label_size);
-    // gmp_printf("%Zd\n\n", params.ciphertext);
-    // printf("%ld\n\n", params.ciphertext_size);
-    // printf("%s\n\n", params.ciphertext_size_hex);
-    // gmp_printf("%Zd\n\n", params.b);
-
     step_1(&params, &f_1);
-    gmp_printf("f_1: %Zd\n", f_1);
+    gmp_printf("f_1 (base 10): %Zd\n", f_1);
     step_2(&params, &f_1, &f_2);
-    gmp_printf("f_2: %Zd\n", f_2);
+    gmp_printf("f_2 (base 10): %Zd\n", f_2);
     step_3(&params, &f_2, &encoded_message);
-    gmp_printf("Encoded message: %Zd\n", encoded_message);
-    decode(&params, &encoded_message);
-    gmp_printf("Message: %Zd\n", message);
+    gmp_printf("Encoded message (base 10): %Zd\n\n", encoded_message);
+    decode(&params, &encoded_message, &message);
+    
+    clock_t toc = clock();
+    printf("Attack complete\nTime taken: %.2f seconds.\n", ((double) toc - tic) / CLOCKS_PER_SEC);
+    gmp_printf("Target material (base 10): %Zd\n", message);
+    printf("Interactions (base 10): %llu\n", params.interactions);
 }
  
 int main(int argc, char* argv[]) {
@@ -289,5 +282,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-// TODO: Change lots of the ints to unsigned ints to prevent overflow
