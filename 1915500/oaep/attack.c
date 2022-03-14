@@ -17,61 +17,9 @@ typedef struct {
     mpz_t ciphertext;
     long int label_size;
     long int ciphertext_size;
+    char *ciphertext_size_hex;
     mpz_t b;
-} attack_params;
-
-void interact(int* t, int* r, const char* G) {
-    // Send G to attack target.
-    fprintf (target_in, "%s\n", G); fflush(target_in);
-    // Receive ( t, r ) from attack target.
-    if (1 != fscanf(target_out, "%d", t)) abort();
-    if (1 != fscanf( target_out, "%d", r)) abort();
-}
-
-void get_attack_params(char config_file[], attack_params* attack_params) {
-    FILE *file = fopen(config_file, "r");
-    char modulus_hex[1024], public_exponent_hex[1024], label_hex[1024], ciphertext_hex[1024];
-    char *label_hex_split, *ciphertext_hex_split;
-    char *search = ":";
-
-    fgets(modulus_hex, sizeof(modulus_hex), file);
-    fgets(public_exponent_hex, sizeof(public_exponent_hex), file);
-    fgets(label_hex, sizeof(label_hex), file);
-    fgets(ciphertext_hex, sizeof(ciphertext_hex), file);
-
-    mpz_set_str(attack_params->modulus, modulus_hex, 16);
-    mpz_set_str(attack_params->public_exponent, public_exponent_hex, 16);
-
-    label_hex_split = strtok(label_hex, search);
-    attack_params->label_size = strtol(label_hex_split, NULL, 16);
-    label_hex_split = strtok(NULL, search);
-    mpz_set_str(attack_params->label, label_hex_split, 16);
-
-    ciphertext_hex_split = strtok(ciphertext_hex, search);
-    attack_params->ciphertext_size = strtol(ciphertext_hex_split, NULL, 16);
-    ciphertext_hex_split = strtok(NULL, search);
-    mpz_set_str(attack_params->ciphertext, ciphertext_hex_split, 16);
-
-    mpz_ui_pow_ui(attack_params->b, 2, 8 * (attack_params->ciphertext_size - 1));
-    
-    fclose(file);
-}
-
-void attack(char config_file[]) {
-    attack_params attack_params;
-    mpz_init(attack_params.modulus); mpz_init(attack_params.public_exponent); mpz_init(attack_params.label); mpz_init(attack_params.ciphertext); mpz_init(attack_params.b);
-    
-    get_attack_params(config_file, &attack_params);
-
-    gmp_printf("%Zd\n\n", attack_params.modulus);
-    gmp_printf("%Zd\n\n", attack_params.public_exponent);
-    gmp_printf("%Zd\n\n", attack_params.label);
-    gmp_printf("%Zd\n\n", attack_params.ciphertext);
-    printf("%ld\n\n", attack_params.label_size);
-    printf("%ld\n\n", attack_params.ciphertext_size);
-    gmp_printf("%Zd\n\n", attack_params.b);
-
-}
+} params;
 
 void cleanup(int s){
     fclose(target_in);
@@ -82,6 +30,77 @@ void cleanup(int s){
     close(attack_raw[1]); 
     if (pid > 0) kill(pid, SIGKILL);
     exit(1); 
+}
+
+void get_params(char config_file[], params* params) {
+    FILE *file = fopen(config_file, "r");
+    char modulus_hex[1024], public_exponent_hex[1024], label_hex[1024], ciphertext_hex[1024];
+    char *label_hex_split, *ciphertext_hex_split;
+    char *search = ":";
+
+    fgets(modulus_hex, sizeof(modulus_hex), file);
+    fgets(public_exponent_hex, sizeof(public_exponent_hex), file);
+    fgets(label_hex, sizeof(label_hex), file);
+    fgets(ciphertext_hex, sizeof(ciphertext_hex), file);
+
+    mpz_set_str(params->modulus, modulus_hex, 16);
+    mpz_set_str(params->public_exponent, public_exponent_hex, 16);
+
+    label_hex_split = strtok(label_hex, search);
+    params->label_size = strtol(label_hex_split, NULL, 16);
+    label_hex_split = strtok(NULL, search);
+    mpz_set_str(params->label, label_hex_split, 16);
+
+    ciphertext_hex_split = strtok(ciphertext_hex, search);
+    params->ciphertext_size_hex = malloc(strlen(ciphertext_hex_split) + 1);
+    strcpy(params->ciphertext_size_hex, ciphertext_hex_split);
+    params->ciphertext_size = strtol(ciphertext_hex_split, NULL, 16);
+    ciphertext_hex_split = strtok(NULL, search);
+    mpz_set_str(params->ciphertext, ciphertext_hex_split, 16);
+
+    mpz_ui_pow_ui(params->b, 2, 8 * (params->ciphertext_size - 1));
+    
+    fclose(file);
+}
+
+void interact(int* error_code, const char* value) {
+    fprintf (target_in, "%s\n", value); fflush(target_in);
+    if (1 != fscanf(target_out, "%d", error_code)) abort();
+}
+
+int send_to_oracle(mpz_t* f_num, params* params) {
+    mpz_t value;
+    mpz_init(value);
+    mpz_powm(value, *f_num, params->public_exponent, params->modulus);
+    mpz_mul(value, value, params->ciphertext);
+    mpz_mod(value, value, params->modulus);
+
+    return 1;
+}
+
+void step_1(params* params, mpz_t* f_1) {
+    mpz_init_set_ui(*f_1, 2);
+    while (send_to_oracle(f_1, params) != 1) {
+        mpz_mul_ui(*f_1, *f_1, 2);
+    }
+}
+
+void attack(char config_file[]) {
+    params params;
+    mpz_t f_1, f_2;
+    mpz_inits(params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
+    
+    get_params(config_file, &params);
+
+    gmp_printf("%Zd\n\n", params.modulus);
+    gmp_printf("%Zd\n\n", params.public_exponent);
+    gmp_printf("%Zd\n\n", params.label);
+    gmp_printf("%Zd\n\n", params.ciphertext);
+    printf("%ld\n\n", params.label_size);
+    printf("%ld\n\n", params.ciphertext_size);
+    printf("%s\n\n", params.ciphertext_size_hex);
+    gmp_printf("%Zd\n\n", params.b);
+
 }
  
 int main(int argc, char* argv[]) {
