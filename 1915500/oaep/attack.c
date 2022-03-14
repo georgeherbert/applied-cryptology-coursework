@@ -34,12 +34,14 @@ void cleanup(int s){
     exit(1); 
 }
 
+// Gets the parameters needed for the attack
 void get_params(const char *config_file, params* params) {
     FILE *file = fopen(config_file, "r");
     char modulus_bytes[65536], public_exponent_bytes[65536], label_bytes[65536], ciphertext_bytes[65536];
     char *label_bytes_split, *ciphertext_bytes_split;
     char *search = ":";
 
+    // Reads the config file line by line
     fgets(modulus_bytes, sizeof(modulus_bytes), file);
     fgets(public_exponent_bytes, sizeof(public_exponent_bytes), file);
     fgets(label_bytes, sizeof(label_bytes), file);
@@ -47,9 +49,11 @@ void get_params(const char *config_file, params* params) {
 
     mpz_inits(params->modulus, params->public_exponent, params->label, params->ciphertext, params->b, NULL);
 
+    // Assigns the modulus and public_exponent parameters
     mpz_set_str(params->modulus, modulus_bytes, 16);
     mpz_set_str(params->public_exponent, public_exponent_bytes, 16);
 
+    // Assigns the label related parameters
     label_bytes[strcspn(label_bytes, "\n")] = 0;
     params->label_bytes = malloc(strlen(label_bytes) + 1);
     strcpy(params->label_bytes, label_bytes);
@@ -58,6 +62,7 @@ void get_params(const char *config_file, params* params) {
     label_bytes_split = strtok(NULL, search);
     mpz_set_str(params->label, label_bytes_split, 16);
 
+    // Assigns the ciphertext related parameters
     ciphertext_bytes_split = strtok(ciphertext_bytes, search);
     params->ciphertext_size_bytes = malloc(strlen(ciphertext_bytes_split) + 1);
     strcpy(params->ciphertext_size_bytes, ciphertext_bytes_split);
@@ -70,6 +75,7 @@ void get_params(const char *config_file, params* params) {
     fclose(file);
 }
 
+// Interacts with the device
 void interact(int* error_code, const char* value, params* params) {
     params->interactions += 1;
     fprintf(target_in, "%s\n", params->label_bytes);
@@ -78,12 +84,14 @@ void interact(int* error_code, const char* value, params* params) {
     fscanf(target_out, "%d", error_code);
 }
 
+// Prepends zeros to src
 void prepend_zeros(char *dest, const char *src, const unsigned long long int width) {
     size_t len = strlen(src);
     if (len >= width) strcpy(dest, src);
     else sprintf(dest, "%0*d%s", (int) (width - len), 0, src);
 }
 
+// Processes f_num and sends it to the oracle
 int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_t value;
     mpz_init(value);
@@ -91,6 +99,7 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_mul(value, value, params->ciphertext);
     mpz_mod(value, value, params->modulus);
 
+    // The value needs to be prepended so that it is the correct length
     char value_bytes[params->ciphertext_size * 2 + 1];
     prepend_zeros(value_bytes, mpz_get_str(NULL, 16, value), params->ciphertext_size * 2);
 
@@ -100,6 +109,7 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     return error_code;
 }
 
+// Step 1 of the attack
 void step_1(params* params, mpz_t* f_1) {
     mpz_init_set_ui(*f_1, 2);
     while (send_to_oracle(f_1, params) != 1) {
@@ -107,6 +117,7 @@ void step_1(params* params, mpz_t* f_1) {
     }
 }
 
+// Step 2 of the attack
 void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
     mpz_t temp, temp_2;
     mpz_inits(*f_2, temp, temp_2, NULL);
@@ -120,6 +131,7 @@ void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
     }
 }
 
+// Step 3 of the attack
 void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
     mpz_t message_min, message_max, f_tmp, i, f_3, temp, temp_2;
     mpz_inits(*encoded_message, message_min, message_max, f_tmp, i, f_3, temp, temp_2, NULL);
@@ -151,6 +163,7 @@ void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
     mpz_set(*encoded_message, message_min);
 }
 
+// Converts the mpz_t encoded_encoded message into an array of bytes of the correct length
 void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encoded_message_bytes) {
     size_t size;
     mpz_export(encoded_message_bytes, &size, 1, sizeof(char), -1, 0, *encoded_message);
@@ -164,9 +177,12 @@ void mpz_t_to_bytes(params *params, mpz_t* encoded_message, unsigned char* encod
     }
 }
 
+// Implements the MGF1 masg generation function
 void mgf1(unsigned char* input, unsigned char* output, const unsigned long long int input_length, const unsigned long long int output_length) {
+    // temp stores the bytes of each iteration before it is hashed
     unsigned char temp[input_length + 4];
 
+    // temp_2 stores the full output before it is truncated
     unsigned long long int size_of_temp_2;
     unsigned long long int remainder = output_length % 20;
     if (remainder == 0) size_of_temp_2 = output_length;
@@ -175,11 +191,11 @@ void mgf1(unsigned char* input, unsigned char* output, const unsigned long long 
 
     memcpy(temp, input, input_length);
     for (unsigned long long int counter = 0; counter <= ((output_length - 1) / 20); counter += 1) {
+        // Adds the counter
         unsigned char counter_byte_1 = counter >> 24 & 0xFF;
         unsigned char counter_byte_2 = counter >> 16 & 0xFF;
         unsigned char counter_byte_3 = counter >> 8 & 0xFF;
         unsigned char counter_byte_4 = counter & 0xFF;
-
         memcpy(temp + input_length, &counter_byte_1, 1);
         memcpy(temp + input_length + 1, &counter_byte_2, 1);
         memcpy(temp + input_length + 2, &counter_byte_3, 1);
@@ -187,22 +203,27 @@ void mgf1(unsigned char* input, unsigned char* output, const unsigned long long 
 
         SHA1(temp, input_length + 4, temp_2 + counter * 20);
     }
+    // Only the leading l octets of temp_2 are required
     memcpy(output, temp_2, output_length);
 }
 
+// XORs two byte arrays
 void xor(const unsigned char* src_x, const unsigned char* src_y, unsigned char* dest, const unsigned long long int size) {
     for (unsigned long long int i = 0; i < size; i++) {
         dest[i] = src_x[i] ^ src_y[i];
     }
 }
 
+// Finds the index of the 0x01 octet in db
 int find_message_index(const unsigned char* db, const unsigned long long int size) {
-    for (int i = 0; i < size; i++) {
-        if (db[i] == 0x01) return i + 1;
+    int i;
+    for (i = 0; i < size; i++) {
+        if (db[i] == 0x01) break;
     }
-    return -1;
+    return i + 1;
 }
 
+// Decodes the encoded message
 void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
     unsigned char encoded_message_bytes[params->ciphertext_size];
     mpz_t_to_bytes(params, encoded_message, encoded_message_bytes);
@@ -213,29 +234,34 @@ void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
     unsigned char masked_db[remainder_size], db_mask[remainder_size], db[remainder_size];
     unsigned char lhash[20], lhash_[20];
 
+    // Sets the masked_seed and masked_db variables
     memcpy(masked_seed, encoded_message_bytes + 1, 20);
     memcpy(masked_db, encoded_message_bytes + 21, remainder_size);
 
+    // Sets the seed_mask, seed, db_mask and db variables
     mgf1(masked_db, seed_mask, remainder_size, 20);
     xor(masked_seed, seed_mask, seed, 20);
     mgf1(seed, db_mask, 20, remainder_size);
     xor(masked_db, db_mask, db, remainder_size);
 
+    // Ensures that lhash and lhash_ match (used in testing)
     unsigned char label_bytes[params->label_size];
     mpz_export(label_bytes, NULL, 1, sizeof(char), -1, 0, params->label);
     SHA1(label_bytes, params->label_size, lhash);
     memcpy(lhash_, db, 20);
 
+    // Extracts the message from db
     const int message_index = find_message_index(db, remainder_size);
-
     const int message_size = remainder_size - message_index;
     unsigned char message_bytes[message_size];
     memcpy(message_bytes, db + message_index, message_size);
 
+    // Converts the message from an array of bytes to a mpz_t
     mpz_init(*message);
     mpz_import(*message, message_size, 1, sizeof(char), -1, 0, message_bytes);
 }
 
+// The main attack
 void attack(const char *config_file) {
     clock_t tic = clock();
     params params;
@@ -244,6 +270,7 @@ void attack(const char *config_file) {
     params.interactions = 0;
     get_params(config_file, &params);
 
+    // The four main stages of the attack
     step_1(&params, &f_1);
     gmp_printf("f_1 (base 10): %Zd\n", f_1);
     step_2(&params, &f_1, &f_2);
@@ -258,10 +285,13 @@ void attack(const char *config_file) {
     printf("Interactions (base 10): %llu\n", params.interactions);
 }
  
+// Initialises the target variables and starts the attack
 int main(int argc, char* argv[]) {
     signal(SIGINT, &cleanup);
+
     if (pipe(target_raw) == -1) abort();
     if (pipe(attack_raw) == -1) abort();
+
     pid = fork();
     if (pid > 0) {
         if ((target_out = fdopen(attack_raw[0], "r")) == NULL) abort();
@@ -278,7 +308,7 @@ int main(int argc, char* argv[]) {
     else if (pid < 0) {
         abort();
     }
-    cleanup(SIGINT);
 
+    cleanup(SIGINT);
     return 0;
 }
