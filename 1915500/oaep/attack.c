@@ -68,12 +68,18 @@ void get_params(char config_file[], params* params) {
 }
 
 void interact(int* error_code, const char* value, params* params) {
-    printf("%s\n", params->label_hex);
-    printf("%s:%s\n", params->ciphertext_size_hex, value);
+    // printf("%s\n", params->label_hex);
+    // printf("%s:%s\n", params->ciphertext_size_hex, value);
     fprintf(target_in, "%s\n", params->label_hex);
     fprintf(target_in, "%s:%s\n", params->ciphertext_size_hex, value);
     fflush(target_in);
     if (1 != fscanf(target_out, "%d", error_code)) abort();
+}
+
+void prepend_zeros(char *dest, const char *src, int width) {
+    size_t len = strlen(src);
+    if (len >= width) strcpy(dest, src);
+    else sprintf(dest, "%0*d%s", (int) (width - len), 0, src);
 }
 
 int send_to_oracle(mpz_t* f_num, params* params) {
@@ -82,9 +88,13 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_powm(value, *f_num, params->public_exponent, params->modulus);
     mpz_mul(value, value, params->ciphertext);
     mpz_mod(value, value, params->modulus);
-    char *value_hex = mpz_get_str(NULL, 16, value);
+
+    char value_hex[params->ciphertext_size * 2 + 1];
+    prepend_zeros(value_hex, mpz_get_str(NULL, 16, value), params->ciphertext_size * 2);
+
     int error_code;
     interact(&error_code, value_hex, params);
+    // printf("Error code: %d\n", error_code);
     return error_code;
 }
 
@@ -92,6 +102,19 @@ void step_1(params* params, mpz_t* f_1) {
     mpz_init_set_ui(*f_1, 2);
     while (send_to_oracle(f_1, params) != 1) {
         mpz_mul_ui(*f_1, *f_1, 2);
+    }
+}
+
+void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
+    mpz_t temp, temp_2;
+    mpz_inits(temp, temp_2, NULL);
+    mpz_add(temp, params->modulus, params->b);
+    mpz_fdiv_q(temp, temp, params->b);
+    mpz_fdiv_q_ui(temp_2, *f_1, 2);
+    mpz_mul(*f_2, temp, temp_2);
+    while (send_to_oracle(f_2, params) != 2) {
+        mpz_add(*f_2, *f_2, temp_2);
+        // gmp_printf("f_2: %Zd\n", *f_2);
     }
 }
 
@@ -113,6 +136,9 @@ void attack(char config_file[]) {
     // gmp_printf("%Zd\n\n", params.b);
 
     step_1(&params, &f_1);
+    gmp_printf("f_1: %Zd\n", f_1);
+    step_2(&params, &f_1, &f_2);
+    gmp_printf("f_2: %Zd\n", f_2);
 }
  
 int main(int argc, char* argv[]) {
