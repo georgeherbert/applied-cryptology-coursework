@@ -48,5 +48,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-#MacOS
+# MacOS
 .DS_Store
+
+# VS Code
+.vscode/*
