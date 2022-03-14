@@ -14,8 +14,9 @@ typedef struct {
     mpz_t modulus;
     mpz_t public_exponent;
     mpz_t label;
-    mpz_t ciphertext;
+    char *label_hex;
     long int label_size;
+    mpz_t ciphertext;
     long int ciphertext_size;
     char *ciphertext_size_hex;
     mpz_t b;
@@ -46,6 +47,9 @@ void get_params(char config_file[], params* params) {
     mpz_set_str(params->modulus, modulus_hex, 16);
     mpz_set_str(params->public_exponent, public_exponent_hex, 16);
 
+    label_hex[strcspn(label_hex, "\n")] = 0;
+    params->label_hex = malloc(strlen(label_hex) + 1);
+    strcpy(params->label_hex, label_hex);
     label_hex_split = strtok(label_hex, search);
     params->label_size = strtol(label_hex_split, NULL, 16);
     label_hex_split = strtok(NULL, search);
@@ -63,8 +67,12 @@ void get_params(char config_file[], params* params) {
     fclose(file);
 }
 
-void interact(int* error_code, const char* value) {
-    fprintf (target_in, "%s\n", value); fflush(target_in);
+void interact(int* error_code, const char* value, params* params) {
+    printf("%s\n", params->label_hex);
+    printf("%s:%s\n", params->ciphertext_size_hex, value);
+    fprintf(target_in, "%s\n", params->label_hex);
+    fprintf(target_in, "%s:%s\n", params->ciphertext_size_hex, value);
+    fflush(target_in);
     if (1 != fscanf(target_out, "%d", error_code)) abort();
 }
 
@@ -74,8 +82,10 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_powm(value, *f_num, params->public_exponent, params->modulus);
     mpz_mul(value, value, params->ciphertext);
     mpz_mod(value, value, params->modulus);
-
-    return 1;
+    char *value_hex = mpz_get_str(NULL, 16, value);
+    int error_code;
+    interact(&error_code, value_hex, params);
+    return error_code;
 }
 
 void step_1(params* params, mpz_t* f_1) {
@@ -92,15 +102,17 @@ void attack(char config_file[]) {
     
     get_params(config_file, &params);
 
-    gmp_printf("%Zd\n\n", params.modulus);
-    gmp_printf("%Zd\n\n", params.public_exponent);
-    gmp_printf("%Zd\n\n", params.label);
-    gmp_printf("%Zd\n\n", params.ciphertext);
-    printf("%ld\n\n", params.label_size);
-    printf("%ld\n\n", params.ciphertext_size);
-    printf("%s\n\n", params.ciphertext_size_hex);
-    gmp_printf("%Zd\n\n", params.b);
+    // gmp_printf("%Zd\n\n", params.modulus);
+    // gmp_printf("%Zd\n\n", params.public_exponent);
+    // gmp_printf("%Zd\n\n", params.label);
+    // gmp_printf("%s\n\n", params.label_hex);
+    // printf("%ld\n\n", params.label_size);
+    // gmp_printf("%Zd\n\n", params.ciphertext);
+    // printf("%ld\n\n", params.ciphertext_size);
+    // printf("%s\n\n", params.ciphertext_size_hex);
+    // gmp_printf("%Zd\n\n", params.b);
 
+    step_1(&params, &f_1);
 }
  
 int main(int argc, char* argv[]) {
@@ -127,3 +139,5 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+// TODO: Add leading zeros if value is not 128 bytes
