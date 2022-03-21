@@ -1,3 +1,23 @@
+"""
+Brief overview of the attack:
+1. Generate a set of random ciphertexts to send to the attack target
+2. Record the execution time (measured in clock cycles) to decrypt each ciphertext
+3. Start with k = 1
+4. To uncover bit i of the key, supposing we know the first i - 1 bits of the key:
+    4.1 Simulate the square operator of the Montgomery exponentiation with bit i = 1
+    4.2 Split the set of ciphertexts by whether the Montgomery multiplication required an additional reduction into sets M1 and M2
+    4.3 Simulate the square operator of the Montgomery exponentiation with bit i = 0
+    4.4 Split the set of ciphertexts by whether the Montgomery multiplication required an additional reduction into sets M3 and M4
+    4.5 If abs(M1 - M2) > abs(M3 - M4) then bit i = 1, otherwise bit i = 0
+    4.6 Test if all bits of the key have been identified by testing the key on a test message
+
+Error detecting mechanism:
+1. We can detect errors by identifying whether abs(M1 - M2) and abs(M3 - M4) is bigger by a sufficient threshold
+    1.1 To rectify this, we can introduce a threshold and go back steps if the threshold is not reached
+2. Larger keys require more samples
+    2.1 If we are still making insufficient progress after going back steps, we can double the number of samples
+"""
+
 import sys
 import subprocess
 import random
@@ -15,8 +35,10 @@ TARGET_OUT = TARGET.stdout
 W = 64 # Word length
 B = 2 ** W # Base
 
+THRESHOLD = 16
+
 TEST_MESSAGE = 0x123456789abcdef
-INITIAL_SAMPLES = 5000
+INITIAL_SAMPLES = 1000
 
 def get_attack_params():
     with open(sys.argv[2], "r") as config:
@@ -87,6 +109,7 @@ def calc_d(n, rho_sq, l_n, omega, e):
     m_temps = [mont_exp_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
 
     d = 0x1
+
     while not test_d(d, e, n):
         ciphertext_mont_bit_one = [mont_exp_next(True, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)]
         ciphertext_mont_bit_zero = [mont_exp_next(False, m_temp, x, l_n, omega, n) for m_temp, x in zip(m_temps, ciphertext_monts)] 
@@ -98,12 +121,24 @@ def calc_d(n, rho_sq, l_n, omega, e):
         # print(abs(M_3 - M_4))
 
         diff = abs(M_1 - M_2) - abs(M_3 - M_4)
+        print(abs(diff))
+
         d *= 2
         if diff >= 0:
             m_temps = [i[0] for i in ciphertext_mont_bit_one]
             d += 1
         elif diff < 0:
             m_temps = [i[0] for i in ciphertext_mont_bit_zero]
+        
+        if abs(diff) < THRESHOLD:
+            ciphertext_samples_new, ciphertext_times_new = gen_ciphertext_samples_times(n, INITIAL_SAMPLES)
+            ciphertext_samples += ciphertext_samples_new
+            ciphertext_times += ciphertext_times_new
+
+            ciphertext_monts = [mont_mul(c, rho_sq, l_n, omega, n)[0] for c in ciphertext_samples]
+            m_temps = [mont_exp_init(rho_sq, l_n, omega, n, x) for x in ciphertext_monts]
+
+            d = 0x1
 
     d = d * 2 + calc_final_bit(d, e, n)
     return d, interactions
