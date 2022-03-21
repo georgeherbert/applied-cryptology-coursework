@@ -2,6 +2,7 @@ import sys
 import subprocess
 import random
 from Crypto.Cipher import AES
+import random
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -32,19 +33,20 @@ HAMMING_WEIGHT_S_BOX = [
     3, 3, 3, 3, 7, 5, 2, 3, 2, 4, 4, 4, 3, 3, 6, 3
 ]
 
+KEY = random.randrange(2 ** 256)
+RANGE_GUESS = 7500
+
 def interact(block, tweak):
     TARGET_IN.write(f"{block}\n".encode())
     TARGET_IN.write(f"10:{tweak:0{16 * 2}x}\n".encode())
-    # print(f"{block}\n")
-    # print(f"10:{tweak:0{16 * 2}x}\n")
-    TARGET_IN.write(f"10:f17e09948297db5d0c6c54bf2d76ce5d\n".encode())
-    TARGET_IN.write(f"20:04704b480e227ad0a839cc858d91c698f166b079bee73de3124ac8a7efc8ba45\n".encode())
+    TARGET_IN.write(f"10:{random.randrange(2 ** 128):032x}\n".encode())
+    TARGET_IN.write(f"20:{KEY:064x}\n".encode())
     TARGET_IN.flush()
     trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
-    trace_start = trace[1000:6000]
-    trace_end = trace[-6000:-1000]
+    trace_start = trace[:RANGE_GUESS]
+    trace_end = trace[-RANGE_GUESS:]
     plaintext = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
-    return trace_start, trace_end, plaintext
+    return trace_start, trace_end, plaintext, len(trace)
 
 def get_traces():
     tweaks = []
@@ -53,12 +55,12 @@ def get_traces():
     plaintexts = []
     for _ in range(TRACES):
         tweak = random.randrange(0, 2 ** 128)
-        trace_start, trace_end, plaintext = interact(0, tweak)
+        trace_start, trace_end, plaintext, len_trace = interact(0, tweak)
         tweaks.append(tweak)
         traces_start.append(trace_start)
         traces_end.append(trace_end)
         plaintexts.append(plaintext)
-    return tweaks, traces_start, traces_end, plaintexts
+    return tweaks, traces_start, traces_end, plaintexts, len_trace
 
 def extract_byte(num, byte):
     value = (num >> (8 * byte) & 0xFF)
@@ -71,9 +73,10 @@ def pearsons(x, y):
     denominator = (sum([(x_i - x_mean) ** 2 for x_i in x]) * sum([(y_i - y_mean) ** 2 for y_i in y])) ** (1 / 2)
     return numerator / denominator
 
-def calc_byte(byte, tweaks_pps, traces):
+def calc_byte(byte, tweaks_pps, traces, k_1_or_k_2):
     key_guess = 0
     max_correlation = 0
+    max_correlation_trace_index = 0
     for key_byte in range(256):
         hamming_matrix_column = [HAMMING_WEIGHT_S_BOX[extract_byte(tweak_pp, byte) ^ key_byte] for tweak_pp in tweaks_pps]
         for i in range(len(traces[0])):
@@ -81,14 +84,18 @@ def calc_byte(byte, tweaks_pps, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-    print(key_guess, max_correlation)
+                max_correlation_trace_index = i
+    if k_1_or_k_2 == "k_2":
+        print(max_correlation_trace_index)
+    elif k_1_or_k_2 == "k_1":
+        print(-(RANGE_GUESS - max_correlation_trace_index))
     return key_guess
 
-def calc_key(tweaks_pps, traces):
+def calc_key(tweaks_pps, traces, k_1_or_k_2):
     key = 0
     # For each byte of the key
     for i in range(16):
-        next_byte = calc_byte(i, tweaks_pps, traces)
+        next_byte = calc_byte(i, tweaks_pps, traces, k_1_or_k_2)
         key += next_byte * (256 ** i)
     return key
 
@@ -104,29 +111,22 @@ def calc_pps(plaintexts, ts):
     return [p ^ t for p, t in zip(plaintexts, ts)]
 
 def attack():
-    tweaks, traces_start, traces_end, plaintexts = get_traces()
+    tweaks, traces_start, traces_end, plaintexts, len_trace = get_traces()
+
+    print("Trace length:", len_trace)
     
-    key_2 = calc_key(tweaks, traces_start)
-    # key_2 = 320877140613514890691378064330247603255
+    key_2 = calc_key(tweaks, traces_start, "k_2")
     print(key_2)
-    print(hex(key_2))
     
     ts = calc_ts(key_2, tweaks)
     pps = calc_pps(plaintexts, ts)
 
-    key_1 = calc_key(pps, traces_end)
-    # key_1 = 5899976120818012681446097137416914584
+    key_1 = calc_key(pps, traces_end, "k_1")
     print(key_1)
-    print(hex(key_1))
 
     key = key_1 * (256 ** 16) + key_2
-    # key = 2007657839168970153837224255792385420570539747675455109899089218065849877559
-    print(key)
-    print(hex(key))
+    print("Target key:\n\t", KEY)
+    print("Computed key:\n\t", key)
 
 if  __name__ == "__main__":
     attack()
-
-# TODO: Variable trace lengths - maybe padding
-# TODO: Remove the manual using of first N samples
-# TODO: Parallelise

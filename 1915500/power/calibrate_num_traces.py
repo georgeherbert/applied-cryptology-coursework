@@ -2,6 +2,7 @@ import sys
 import subprocess
 import random
 from Crypto.Cipher import AES
+import random
 
 TARGET = subprocess.Popen(
     args = f"./{sys.argv[1]}",
@@ -10,8 +11,6 @@ TARGET = subprocess.Popen(
 )
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
-
-TRACES = 20
 
 HAMMING_WEIGHT_S_BOX = [
     4, 5, 6, 6, 5, 5, 6, 4, 2, 1, 5, 4, 7, 6, 5, 5,
@@ -32,13 +31,11 @@ HAMMING_WEIGHT_S_BOX = [
     3, 3, 3, 3, 7, 5, 2, 3, 2, 4, 4, 4, 3, 3, 6, 3
 ]
 
-def interact(block, tweak):
+def interact(block, tweak, key_actual):
     TARGET_IN.write(f"{block}\n".encode())
     TARGET_IN.write(f"10:{tweak:0{16 * 2}x}\n".encode())
-    # print(f"{block}\n")
-    # print(f"10:{tweak:0{16 * 2}x}\n")
-    TARGET_IN.write(f"10:f17e09948297db5d0c6c54bf2d76ce5d\n".encode())
-    TARGET_IN.write(f"20:04704b480e227ad0a839cc858d91c698f166b079bee73de3124ac8a7efc8ba45\n".encode())
+    TARGET_IN.write(f"10:{random.randrange(2 ** 128):032x}\n".encode())
+    TARGET_IN.write(f"20:{key_actual:064x}\n".encode())
     TARGET_IN.flush()
     trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
     trace_start = trace[1000:6000]
@@ -46,14 +43,14 @@ def interact(block, tweak):
     plaintext = int(TARGET_OUT.readline().strip().split(b":")[1], 16)
     return trace_start, trace_end, plaintext
 
-def get_traces():
+def get_traces(num_traces, key_actual):
     tweaks = []
     traces_start = []
     traces_end = []
     plaintexts = []
-    for _ in range(TRACES):
+    for _ in range(num_traces):
         tweak = random.randrange(0, 2 ** 128)
-        trace_start, trace_end, plaintext = interact(0, tweak)
+        trace_start, trace_end, plaintext = interact(0, tweak, key_actual)
         tweaks.append(tweak)
         traces_start.append(trace_start)
         traces_end.append(trace_end)
@@ -81,7 +78,7 @@ def calc_byte(byte, tweaks_pps, traces):
             if correlation > max_correlation:
                 max_correlation = correlation
                 key_guess = key_byte
-    print(key_guess, max_correlation)
+    # print(key_guess, max_correlation)
     return key_guess
 
 def calc_key(tweaks_pps, traces):
@@ -104,29 +101,25 @@ def calc_pps(plaintexts, ts):
     return [p ^ t for p, t in zip(plaintexts, ts)]
 
 def attack():
-    tweaks, traces_start, traces_end, plaintexts = get_traces()
-    
-    key_2 = calc_key(tweaks, traces_start)
-    # key_2 = 320877140613514890691378064330247603255
-    print(key_2)
-    print(hex(key_2))
-    
-    ts = calc_ts(key_2, tweaks)
-    pps = calc_pps(plaintexts, ts)
+    iterations = 2
 
-    key_1 = calc_key(pps, traces_end)
-    # key_1 = 5899976120818012681446097137416914584
-    print(key_1)
-    print(hex(key_1))
-
-    key = key_1 * (256 ** 16) + key_2
-    # key = 2007657839168970153837224255792385420570539747675455109899089218065849877559
-    print(key)
-    print(hex(key))
+    for num_traces in range(13, 25):
+        successes = 0
+        for _ in range(iterations):
+            key_actual = random.randrange(2 ** 256)
+            tweaks, traces_start, traces_end, plaintexts = get_traces(num_traces, key_actual)
+            key_2 = calc_key(tweaks, traces_start)
+            key_2_hex = f"{key_2:032x}"
+            key_actual_hex = f"{key_actual:032x}"
+            print(key_actual_hex)
+            print(key_2_hex)
+            for i in range(64, 32, -2):
+                if key_2_hex[i - 2:i] == key_actual_hex[i - 2:i]:
+                    successes += 1
+                print(successes)
+        print("Traces:", num_traces)
+        print("Overall success rate:", successes / (iterations * 16))
+        print("")
 
 if  __name__ == "__main__":
     attack()
-
-# TODO: Variable trace lengths - maybe padding
-# TODO: Remove the manual using of first N samples
-# TODO: Parallelise
