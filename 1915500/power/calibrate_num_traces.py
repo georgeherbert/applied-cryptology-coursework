@@ -103,7 +103,7 @@ def calc_pps(plaintexts, ts):
 def attack():
     iterations = 2
 
-    for num_traces in range(13, 25):
+    for num_traces in range(10, 25):
         successes = 0
         for _ in range(iterations):
             key_actual = random.randrange(2 ** 256)
@@ -111,12 +111,11 @@ def attack():
             key_2 = calc_key(tweaks, traces_start)
             key_2_hex = f"{key_2:032x}"
             key_actual_hex = f"{key_actual:032x}"
-            print(key_actual_hex)
+            print(key_actual_hex[32:])
             print(key_2_hex)
-            for i in range(64, 32, -2):
-                if key_2_hex[i - 2:i] == key_actual_hex[i - 2:i]:
+            for i in range(32, 0, -2):
+                if key_2_hex[i - 2:i] == key_actual_hex[32:][i - 2:i]:
                     successes += 1
-                print(successes)
         print("Traces:", num_traces)
         print("Overall success rate:", successes / (iterations * 16))
         print("")
