@@ -101,16 +101,16 @@ def calc_pps(plaintexts, ts):
     return [p ^ t for p, t in zip(plaintexts, ts)]
 
 def attack():
-    iterations = 2
+    iterations = 5
 
-    for num_traces in range(10, 25):
+    for num_traces in range(11, 25):
         successes = 0
         for _ in range(iterations):
             key_actual = random.randrange(2 ** 256)
             tweaks, traces_start, traces_end, plaintexts = get_traces(num_traces, key_actual)
             key_2 = calc_key(tweaks, traces_start)
             key_2_hex = f"{key_2:032x}"
-            key_actual_hex = f"{key_actual:032x}"
+            key_actual_hex = f"{key_actual:064x}"
             print(key_actual_hex[32:])
             print(key_2_hex)
             for i in range(32, 0, -2):
