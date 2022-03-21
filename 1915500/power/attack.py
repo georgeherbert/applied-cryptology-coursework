@@ -11,7 +11,7 @@ TARGET = subprocess.Popen(
 TARGET_IN = TARGET.stdin
 TARGET_OUT = TARGET.stdout
 
-TRACES = 20
+TRACES = 16
 
 HAMMING_WEIGHT_S_BOX = [
     4, 5, 6, 6, 5, 5, 6, 4, 2, 1, 5, 4, 7, 6, 5, 5,
