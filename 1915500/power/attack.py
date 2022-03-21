@@ -37,8 +37,6 @@ def interact(block, tweak):
     TARGET_IN.write(f"10:{tweak:0{16 * 2}x}\n".encode())
     # print(f"{block}\n")
     # print(f"10:{tweak:0{16 * 2}x}\n")
-    TARGET_IN.write(f"10:f17e09948297db5d0c6c54bf2d76ce5d\n".encode())
-    TARGET_IN.write(f"20:04704b480e227ad0a839cc858d91c698f166b079bee73de3124ac8a7efc8ba45\n".encode())
     TARGET_IN.flush()
     trace = [int(i) for i in TARGET_OUT.readline().strip().split(b",")[1:]]
     trace_start = trace[1000:6000]
