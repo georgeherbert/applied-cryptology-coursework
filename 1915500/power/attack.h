@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
-#include <openssl/sha.h>
+#include <openssl/aes.h>
 #include <gmp.h>
 
 #endif

@@ -144,27 +144,61 @@ unsigned char calc_byte(int byte, mpz_t tweaks_pps[TRACES], unsigned char traces
     return byte_guess;
 }
 
-void calc_key(mpz_t* key, mpz_t tweaks_pps[TRACES], unsigned char traces[TRACES][5000]) {
-    mpz_t temp;
-    mpz_inits(*key, temp, NULL);
-    mpz_set_ui(temp, 1);
+void calc_key(mpz_t* key, unsigned char key_2_bytes[16], mpz_t tweaks_pps[TRACES], unsigned char traces[TRACES][5000]) {
+    mpz_t key_bytes[16], temp, temp_2;
+    mpz_inits(*key, temp, temp_2, NULL);
 
+    #pragma omp parallel for num_threads(16)
     for (int i = 0; i < 16; i++) {
+        mpz_init(key_bytes[i]);
         unsigned char next_byte = calc_byte(i, tweaks_pps, traces);
-        mpz_add(*key, *key, temp);
+        key_2_bytes[15 - i] = next_byte;
+        mpz_set_ui(key_bytes[i], (unsigned long int) next_byte);
+    }
+
+    mpz_set_ui(temp, 1);
+    for (int i = 0; i < 16; i++) {
+        mpz_mul(temp_2, key_bytes[i], temp);
+        mpz_add(*key, *key, temp_2);
         mpz_mul_ui(temp, temp, 256);
+    }
+}
+
+void mpz_t_to_bytes(mpz_t* tweak, unsigned char* tweak_bytes) {
+    size_t size;
+    mpz_export(tweak_bytes, &size, 1, sizeof(char), -1, 0, *tweak);
+    int to_shift = 16 - size;
+    for (int i = 15; i >= to_shift; i--) tweak_bytes[i] = tweak_bytes[i - to_shift];
+    for (int i = 0; i < to_shift; i++) tweak_bytes[i] = 0;
+}
+
+void calc_ts(unsigned char key_2_bytes[16], mpz_t tweaks[TRACES], mpz_t ts[TRACES]) {
+    AES_KEY rk;
+    AES_set_encrypt_key(key_2_bytes, 128, &rk);
+    for (int i = 0; i < TRACES; i++) {
+        unsigned char tweak_bytes[16], encrypted_bytes[16];
+        mpz_t_to_bytes(&tweaks[i], tweak_bytes);
+        AES_encrypt(tweak_bytes, encrypted_bytes, &rk);
+        mpz_import(ts[i], 16, 1, sizeof(char), -1, 0, encrypted_bytes);
     }
 }
 
 // The main attack
 void attack(const char *config_file) {
-    mpz_t tweaks[TRACES], plaintexts[TRACES], key, key_1, key_2;
-    unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000];
+    mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], key, key_1, key_2;
+    unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000], key_2_bytes[16];
     params params;
 
     get_traces(tweaks, traces_start, traces_end, plaintexts, &params);
 
-    calc_key(&key_2, tweaks, traces_start);
+    calc_key(&key_2, key_2_bytes, tweaks, traces_start);
+    gmp_printf("%Zd\n", key_2);
+
+    calc_ts(key_2_bytes, tweaks, ts);
+
+    for (int i = 0; i < 16; i++) {
+        gmp_printf("%Zd %ZX\n", tweaks[i], ts[i]);
+    }
 }
  
 // Initialises the target variables and starts the attack
