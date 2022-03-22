@@ -122,7 +122,7 @@ unsigned char calc_byte(int byte, mpz_t tweaks_pps[TRACES], unsigned char traces
 
         unsigned char hamming_matrix_column[TRACES];
         for (int j = 0; j < TRACES; j++) {
-            hamming_matrix_column[j] = extract_byte(&(tweaks_pps[j]), byte) ^ (unsigned char) i;
+            hamming_matrix_column[j] = HAMMING_WEIGHT_S_BOX[extract_byte(&(tweaks_pps[j]), byte) ^ (unsigned char) i];
         }
 
         for (int j = 0; j < 5000; j++) {
