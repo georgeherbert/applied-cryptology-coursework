@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #include <openssl/sha.h>
 #include <gmp.h>
 

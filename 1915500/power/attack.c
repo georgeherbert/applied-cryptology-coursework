@@ -11,10 +11,28 @@ int attack_raw[2];
 FILE* target_out = NULL;
 FILE* target_in = NULL;
 
+unsigned char HAMMING_WEIGHT_S_BOX[256] = {
+    4, 5, 6, 6, 5, 5, 6, 4, 2, 1, 5, 4, 7, 6, 5, 5,
+    4, 2, 4, 6, 6, 4, 4, 4, 5, 4, 3, 6, 4, 3, 4, 2,
+    6, 7, 4, 3, 4, 6, 7, 4, 3, 4, 5, 5, 4, 4, 3, 3,
+    1, 5, 3, 4, 2, 4, 2, 4, 3, 2, 1, 4, 6, 4, 4, 5,
+    2, 3, 3, 3, 4, 5, 4, 2, 3, 5, 5, 5, 3, 5, 5, 2,
+    4, 4, 0, 6, 1, 6, 4, 5, 4, 5, 6, 4, 3, 3, 3, 6,
+    3, 7, 4, 7, 3, 4, 4, 3, 3, 6, 1, 7, 2, 4, 6, 3,
+    3, 4, 1, 5, 3, 5, 3, 6, 5, 5, 5, 2, 1, 8, 6, 4,
+    5, 2, 3, 5, 6, 5, 2, 4, 3, 5, 6, 5, 3, 5, 3, 5,
+    2, 2, 5, 5, 2, 3, 2, 2, 3, 6, 4, 2, 6, 5, 3, 6,
+    3, 3, 4, 2, 3, 2, 2, 4, 3, 5, 4, 3, 3, 4, 4, 5,
+    6, 3, 5, 5, 4, 5, 4, 4, 4, 4, 5, 5, 4, 5, 5, 1,
+    5, 4, 3, 4, 3, 4, 4, 4, 4, 6, 4, 5, 4, 6, 4, 3,
+    3, 5, 5, 4, 2, 2, 6, 3, 3, 4, 5, 5, 3, 3, 4, 5,
+    4, 5, 3, 2, 4, 5, 4, 3, 5, 4, 4, 5, 5, 4, 2, 7,
+    3, 3, 3, 3, 7, 5, 2, 3, 2, 4, 4, 4, 3, 3, 6, 3
+};
+
 typedef struct {
     unsigned char interactions;
 } params;
-
 
 void cleanup(int s) {
     fclose(target_in);
@@ -27,7 +45,7 @@ void cleanup(int s) {
     exit(1); 
 }
 
-void interact(mpz_t* tweak, mpz_t* plaintext, params* params) {
+void interact(mpz_t* tweak, mpz_t* plaintext, params* params, unsigned char trace_start[5000], unsigned char trace_end[5000]) {
     params->interactions += 1;
 
     fprintf(target_in, "0\n");
@@ -36,13 +54,17 @@ void interact(mpz_t* tweak, mpz_t* plaintext, params* params) {
 
     int trace_length;
     fscanf(target_out, "%d,", &trace_length);
-    printf("%d\n", trace_length);
 
-    int trace[trace_length];
+    unsigned char trace[trace_length];
     for (int i = 0; i < trace_length - 1; i++) {
-        fscanf(target_out, "%d,", &trace[i]);
+        fscanf(target_out, "%hhu,", &trace[i]);
     }
-    fscanf(target_out, "%d\n", &trace[trace_length - 1]);
+    fscanf(target_out, "%hhu\n", &trace[trace_length - 1]);
+
+    for (int i = 0; i < 5000; i++) {
+        trace_start[i] = trace[i + 1000];
+        trace_end[i] = trace[i + (trace_length - 6000)];
+    }
 
     int plaintext_length;
     fscanf(target_out, "%x:", &plaintext_length);
@@ -54,27 +76,95 @@ void get_traces(mpz_t tweaks[TRACES], unsigned char traces_start[TRACES][5000], 
     gmp_randinit_default(state);
     gmp_randseed_ui(state, time(NULL));
 
-    for (int i = 0; i < 2; i++) {
+    params->interactions = 0;
+
+    for (int i = 0; i < TRACES; i++) {
         mpz_init(tweaks[i]);
         mpz_init(plaintexts[i]);
 
         mpz_urandomb(tweaks[i], state, 128);
-        interact(&tweaks[i], &plaintexts[i], params);
+        interact(&tweaks[i], &plaintexts[i], params, traces_start[i], traces_end[i]);
+    }
+}
+
+unsigned char extract_byte(mpz_t* num, unsigned char byte) {
+    mpz_t temp;
+    mpz_init(temp);
+    mpz_fdiv_q_2exp(temp, *num, byte * 8);
+    mp_limb_t least_significant_limb = mpz_getlimbn(temp, 0);
+    return (unsigned char) least_significant_limb & 0xFF;
+}
+
+double pearsons(unsigned char x[TRACES], unsigned char y[TRACES]) {
+    long long int sum_x = 0.0, sum_y = 0.0, sum_xy = 0.0, sum_x_sq = 0.0, sum_y_sq = 0.0;
+    for (int i = 0; i < TRACES; i++) {
+        sum_x += x[i];
+        sum_y += y[i];
+        sum_xy += x[i] * y[i];
+        sum_x_sq += x[i] * x[i];
+        sum_y_sq += y[i] * y[i];
     }
 
+    long long int numerator = TRACES * sum_xy - sum_x * sum_y;
+    double denominator = (sqrt(TRACES * sum_x_sq - sum_x * sum_x) * sqrt(TRACES * sum_y_sq - sum_y * sum_y));
+
+    double correlation = (double) numerator / denominator;
+
+    // printf("%f %llu %f\n", correlation, numerator, denominator);
+    return correlation;
+}
+
+unsigned char calc_byte(int byte, mpz_t tweaks_pps[TRACES], unsigned char traces[TRACES][5000]) {
+    unsigned char byte_guess = 0;
+    double max_correlation = 0;
+
+    for (unsigned int i = 0; i < 256; i++) {
+
+        unsigned char hamming_matrix_column[TRACES];
+        for (int j = 0; j < TRACES; j++) {
+            hamming_matrix_column[j] = extract_byte(&(tweaks_pps[j]), byte) ^ (unsigned char) i;
+        }
+
+        for (int j = 0; j < 5000; j++) {
+
+            unsigned char traces_column[TRACES];
+            for (int k = 0; k < TRACES; k++) {
+                traces_column[k] = traces[k][j];
+            }
+            double correlation = pearsons(traces_column, hamming_matrix_column);
+
+            if (correlation > max_correlation) {
+                max_correlation = correlation;
+                byte_guess = i;
+            }
+            // printf("%d %f %f\n", i, max_correlation, correlation);
+        }
+    }
+    printf("%hhu %f\n", byte_guess, max_correlation);
+    return byte_guess;
+}
+
+void calc_key(mpz_t* key, mpz_t tweaks_pps[TRACES], unsigned char traces[TRACES][5000]) {
+    mpz_t temp;
+    mpz_inits(*key, temp, NULL);
+    mpz_set_ui(temp, 1);
+
+    for (int i = 0; i < 16; i++) {
+        unsigned char next_byte = calc_byte(i, tweaks_pps, traces);
+        mpz_add(*key, *key, temp);
+        mpz_mul_ui(temp, temp, 256);
+    }
 }
 
 // The main attack
 void attack(const char *config_file) {
-    mpz_t tweaks[TRACES];
-    unsigned char traces_start[TRACES][5000];
-    unsigned char traces_end[TRACES][5000];
-    mpz_t plaintexts[TRACES];
-
+    mpz_t tweaks[TRACES], plaintexts[TRACES], key, key_1, key_2;
+    unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000];
     params params;
-    params.interactions = 0;
 
     get_traces(tweaks, traces_start, traces_end, plaintexts, &params);
+
+    calc_key(&key_2, tweaks, traces_start);
 }
  
 // Initialises the target variables and starts the attack
