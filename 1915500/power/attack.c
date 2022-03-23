@@ -117,22 +117,17 @@ double pearsons(unsigned char x[TRACES], unsigned char y[TRACES]) {
 unsigned char calc_byte(int byte, mpz_t tweaks_pps[TRACES], unsigned char traces[TRACES][5000]) {
     unsigned char byte_guess = 0;
     double max_correlation = 0;
-
     for (unsigned int i = 0; i < 256; i++) {
-
         unsigned char hamming_matrix_column[TRACES];
         for (int j = 0; j < TRACES; j++) {
             hamming_matrix_column[j] = HAMMING_WEIGHT_S_BOX[extract_byte(&(tweaks_pps[j]), byte) ^ (unsigned char) i];
         }
-
         for (int j = 0; j < 5000; j++) {
-
             unsigned char traces_column[TRACES];
             for (int k = 0; k < TRACES; k++) {
                 traces_column[k] = traces[k][j];
             }
             double correlation = pearsons(traces_column, hamming_matrix_column);
-
             if (correlation > max_correlation) {
                 max_correlation = correlation;
                 byte_guess = i;
@@ -140,7 +135,7 @@ unsigned char calc_byte(int byte, mpz_t tweaks_pps[TRACES], unsigned char traces
             // printf("%d %f %f\n", i, max_correlation, correlation);
         }
     }
-    printf("%hhu %f\n", byte_guess, max_correlation);
+    // printf("%hhu %f\n", byte_guess, max_correlation);
     return byte_guess;
 }
 
@@ -152,7 +147,7 @@ void calc_key(mpz_t* key, unsigned char key_2_bytes[16], mpz_t tweaks_pps[TRACES
     for (int i = 0; i < 16; i++) {
         mpz_init(key_bytes[i]);
         unsigned char next_byte = calc_byte(i, tweaks_pps, traces);
-        key_2_bytes[15 - i] = next_byte;
+        if (key_2_bytes != NULL) key_2_bytes[15 - i] = next_byte;
         mpz_set_ui(key_bytes[i], (unsigned long int) next_byte);
     }
 
@@ -183,22 +178,34 @@ void calc_ts(unsigned char key_2_bytes[16], mpz_t tweaks[TRACES], mpz_t ts[TRACE
     }
 }
 
+void calc_pps(mpz_t plaintexts[TRACES], mpz_t ts[TRACES], mpz_t pps[TRACES]) {
+    for (int i = 0; i < TRACES; i++) {
+        mpz_init(pps[i]);
+        mpz_xor(pps[i], plaintexts[i], ts[i]);
+    }
+}
+
 // The main attack
 void attack(const char *config_file) {
-    mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], key, key_1, key_2;
+    mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], pps[TRACES], key, key_1, key_2;
     unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000], key_2_bytes[16];
     params params;
 
     get_traces(tweaks, traces_start, traces_end, plaintexts, &params);
 
     calc_key(&key_2, key_2_bytes, tweaks, traces_start);
-    gmp_printf("%Zd\n", key_2);
+    gmp_printf("Key 2: %ZX\n", key_2);
 
     calc_ts(key_2_bytes, tweaks, ts);
+    calc_pps(plaintexts, ts, pps);
 
-    for (int i = 0; i < 16; i++) {
-        gmp_printf("%Zd %ZX\n", tweaks[i], ts[i]);
-    }
+    calc_key(&key_1, NULL, pps, traces_end);
+    gmp_printf("Key 1: %ZX\n\n", key_1);
+
+    mpz_mul_2exp(key, key_1, 128);
+    mpz_add(key, key, key_2);
+    gmp_printf("Key: %ZX\n", key);
+    printf("Interactions: %d\n", params.interactions);
 }
  
 // Initialises the target variables and starts the attack
