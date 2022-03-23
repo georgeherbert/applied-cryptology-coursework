@@ -204,7 +204,7 @@ void attack(const char *config_file) {
 
     mpz_mul_2exp(key, key_1, 128);
     mpz_add(key, key, key_2);
-    gmp_printf("Key: %ZX\n", key);
+    gmp_printf("Key: %064ZX\n", key);
     printf("Interactions: %d\n", params.interactions);
 }
  
