@@ -160,19 +160,16 @@ def attack():
         i = 1
         while q != Point(point_calculated.x, point_calculated.y):
             q = ec_add(point_original, q)
-            # print(q.x, q.y)
             i += 1
-        print(i)
-        # print(f"EC = EllipticCurve([FF(a256), FF({a_6})]); P = EC({point_original.x, point_original.y}); P.__mul__({i}) == EC({point_calculated.x}, {point_calculated.y})")
-        # print("x", point_calculated.x)
-        # print("y", point_calculated.y)
-        # print("")
+        print(f"EC = EllipticCurve([FF(a256), FF({a_6})]); P = EC({point_original.x, point_original.y}); P.__mul__({i}) == EC({point_calculated.x}, {point_calculated.y})")
+        print("x", point_calculated.x)
+        print("y", point_calculated.y)
+        print("")
 
         remainders.append(i)
 
     # print(len(ORDERS), ORDERS)
     # print(len(remainders), remainders)
-    print(remainders)
 
     for remainder, order in zip(remainders, ORDERS):
         print(f"x = {remainder} mod {order}")
