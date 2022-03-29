@@ -90,7 +90,7 @@ void assign_points() {
     mpz_set_str(points[52].x, "82578358241576305469964324979533196033717918953622955882915123361600262953139", 10); mpz_set_str(points[52].y, "93184764761902659966478835239970325091114361438499700002930213279923718723068", 10);
     mpz_set_str(points[53].x, "55030172201210812898824400928176169719946292226811843923643909008776221001870", 10); mpz_set_str(points[53].y, "85462144257959636305735004709717131325050447794097798269232341333942346238235", 10);
     mpz_set_str(points[54].x, "90983947348833835290319902386811656319683906006528590092753141504876934977810", 10); mpz_set_str(points[54].y, "27942637801340794506227589880374426499150846947109720024336890767946122522736", 10);
-    mpz_set_str(points[55].x, "16014936581903786455562763973366341013537912920637973157563629192232590278532", 10); mpz_set_str(points[55].y, "6679420137727002793111054591094550449279535139311996923807025225970455492741", 10);
+    mpz_set_str(points[55].x, "16014936581903786455562763973366341013537912920637973157563629192232590278532", 10); mpz_set_str(points[55].y, "66794201377270027931110545910945504492795351393119969238070252259704554927411", 10);
 }
 
 void interact(point *p, point *q, unsigned char *interactions) {
@@ -115,7 +115,7 @@ void add_point(point *p, point *q, mpz_t *a_4, mpz_t* base) {
     mpz_t dydx, temp;
     mpz_inits(dydx, temp, NULL);
 
-    if (mpz_cmp(p->x, q->x) == 0 && mpz_cmp(p->y, q->y)) {
+    if (mpz_cmp(p->x, q->x) == 0 && mpz_cmp(p->y, q->y) == 0) {
         mpz_mul(dydx, p->x, p->x);
         mpz_mul_ui(dydx, dydx, 3);
         mpz_add(dydx, dydx, *a_4);
@@ -151,9 +151,7 @@ int calc_remainder(point *original_point, point *multiplied_point, mpz_t *a_4, m
     mpz_set(temp.x, original_point->x);
     mpz_set(temp.y, original_point->y);
 
-    
-
-    while (mpz_cmp(temp.x, multiplied_point->x) && mpz_cmp(temp.y, multiplied_point->y)) {
+    while (mpz_cmp(temp.x, multiplied_point->x) || mpz_cmp(temp.y, multiplied_point->y)) {
         add_point(original_point, &temp, a_4, base);
         i++;
     }
