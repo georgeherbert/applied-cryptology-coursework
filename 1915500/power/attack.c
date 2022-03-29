@@ -186,7 +186,7 @@ void calc_pps(mpz_t plaintexts[TRACES], mpz_t ts[TRACES], mpz_t pps[TRACES]) {
 }
 
 // The main attack
-void attack(const char *config_file) {
+void attack() {
     mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], pps[TRACES], key, key_1, key_2;
     unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000], key_2_bytes[16];
     params params;
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
     if (pid > 0) {
         if ((target_out = fdopen(attack_raw[0], "r")) == NULL) abort();
         if ((target_in = fdopen(target_raw[1], "w")) == NULL) abort();
-        attack(argv[2]);
+        attack();
     }
     else if (pid == 0) {
         close(STDOUT_FILENO);
