@@ -94,7 +94,7 @@ void assign_points() {
 }
 
 void interact(point *p, point *q, unsigned char *interactions) {
-    interactions++;
+    (*interactions)++;
 
     gmp_fprintf(target_in, "%ZX\n", p->x);
     gmp_fprintf(target_in, "%ZX\n", p->y);
@@ -167,21 +167,57 @@ void calc_remainders(int remainders[NUM_POINTS], point points[NUM_POINTS], point
     mpz_set_str(a_4, "115792089210356248762697446949407573530086143415290314195533631308867097853948", 10);
     mpz_set_str(base, "115792089210356248762697446949407573530086143415290314195533631308867097853951", 10);
 
+    #pragma omp parallel for num_threads(16)
     for (int i = 0; i < NUM_POINTS; i++) {
         remainders[i] = calc_remainder(&points[i], &multiplied_points[i], &a_4, &base);
-        printf("%d\n", remainders[i]);
+        // printf("%d\n", remainders[i]);
     }
 
     mpz_clears(a_4, base, NULL);
 }
 
+void chinese_remainder(int remainders[NUM_POINTS], mpz_t *key) {
+    mpz_t product, pp, temp;
+    mpz_inits(product, pp, temp, NULL);
+
+    mpz_set_ui(product, 1);
+    
+    for (int i = 0; i < NUM_POINTS; i++) {
+        mpz_mul_ui(product, product, orders[i]);
+    }
+
+    mpz_set_ui(*key, 0);
+
+    for (int i = 0; i < NUM_POINTS; i++) {
+        mpz_fdiv_q_ui(pp, product, orders[i]);
+        mpz_set_ui(temp, orders[i]);
+        mpz_invert(temp, pp, temp);
+        mpz_mul(temp, temp, pp);
+        mpz_mul_ui(temp, temp, remainders[i]);
+        mpz_add(*key, *key, temp);
+    }
+
+    mpz_mod(*key, *key, product);
+
+    mpz_clears(product, pp, temp, NULL);
+}
+
 void attack() {
-    assign_points();
     point multiplied_points[NUM_POINTS];
     int remainders[NUM_POINTS];
-    unsigned char interactions;
+    unsigned char interactions = 0;
+    mpz_t key;
+    mpz_init(key);
+
+    assign_points();
     get_multiplied_points(multiplied_points, &interactions);
     calc_remainders(remainders, points, multiplied_points);
+    chinese_remainder(remainders, &key);
+
+    printf("Interactions: %d\n", interactions);
+    gmp_printf("Key: %ZX\n", key);
+
+    mpz_clear(key);
 }
 
 int main(int argc, char* argv[]) {
