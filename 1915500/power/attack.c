@@ -30,10 +30,6 @@ unsigned char HAMMING_WEIGHT_S_BOX[256] = {
     3, 3, 3, 3, 7, 5, 2, 3, 2, 4, 4, 4, 3, 3, 6, 3
 };
 
-typedef struct {
-    unsigned char interactions;
-} params;
-
 void cleanup(int s) {
     fclose(target_in);
     fclose(target_out);
@@ -45,8 +41,8 @@ void cleanup(int s) {
     exit(1); 
 }
 
-void interact(mpz_t* tweak, mpz_t* plaintext, params* params, unsigned char trace_start[5000], unsigned char trace_end[5000]) {
-    params->interactions += 1;
+void interact(mpz_t* tweak, mpz_t* plaintext, unsigned char *interactions, unsigned char trace_start[5000], unsigned char trace_end[5000]) {
+    (*interactions)++;
 
     fprintf(target_in, "0\n");
     gmp_fprintf(target_in, "10:%032ZX\n", *tweak);
@@ -68,22 +64,22 @@ void interact(mpz_t* tweak, mpz_t* plaintext, params* params, unsigned char trac
 
     int plaintext_length;
     fscanf(target_out, "%x:", &plaintext_length);
-    gmp_fscanf(target_out, "%Zx", plaintext); // FIX THIS 
+    gmp_fscanf(target_out, "%Zx", plaintext);
 }
 
-void get_traces(mpz_t tweaks[TRACES], unsigned char traces_start[TRACES][5000], unsigned char traces_end[TRACES][5000], mpz_t plaintexts[TRACES], params* params) {
+void get_traces(mpz_t tweaks[TRACES], unsigned char traces_start[TRACES][5000], unsigned char traces_end[TRACES][5000], mpz_t plaintexts[TRACES], unsigned char *interactions) {
     gmp_randstate_t state;
     gmp_randinit_default(state);
     gmp_randseed_ui(state, time(NULL));
 
-    params->interactions = 0;
+    *interactions = 0;
 
     for (int i = 0; i < TRACES; i++) {
         mpz_init(tweaks[i]);
         mpz_init(plaintexts[i]);
 
         mpz_urandomb(tweaks[i], state, 128);
-        interact(&tweaks[i], &plaintexts[i], params, traces_start[i], traces_end[i]);
+        interact(&tweaks[i], &plaintexts[i], interactions, traces_start[i], traces_end[i]);
     }
 }
 
@@ -92,6 +88,7 @@ unsigned char extract_byte(mpz_t* num, unsigned char byte) {
     mpz_init(temp);
     mpz_fdiv_q_2exp(temp, *num, byte * 8);
     mp_limb_t least_significant_limb = mpz_getlimbn(temp, 0);
+    mpz_clear(temp);
     return (unsigned char) least_significant_limb & 0xFF;
 }
 
@@ -143,9 +140,12 @@ void calc_key(mpz_t* key, unsigned char key_2_bytes[16], mpz_t tweaks_pps[TRACES
     mpz_t key_bytes[16], temp, temp_2;
     mpz_inits(*key, temp, temp_2, NULL);
 
-    #pragma omp parallel for num_threads(16)
     for (int i = 0; i < 16; i++) {
         mpz_init(key_bytes[i]);
+    }
+
+    #pragma omp parallel for num_threads(16)
+    for (int i = 0; i < 16; i++) {
         unsigned char next_byte = calc_byte(i, tweaks_pps, traces);
         if (key_2_bytes != NULL) key_2_bytes[15 - i] = next_byte;
         mpz_set_ui(key_bytes[i], (unsigned long int) next_byte);
@@ -157,6 +157,12 @@ void calc_key(mpz_t* key, unsigned char key_2_bytes[16], mpz_t tweaks_pps[TRACES
         mpz_add(*key, *key, temp_2);
         mpz_mul_ui(temp, temp, 256);
     }
+
+    for (int i = 0; i < 16; i++) {
+        mpz_clear(key_bytes[i]);
+    }
+
+    mpz_clears(temp, temp_2, NULL);
 }
 
 void mpz_t_to_bytes(mpz_t* tweak, unsigned char* tweak_bytes) {
@@ -185,30 +191,37 @@ void calc_pps(mpz_t plaintexts[TRACES], mpz_t ts[TRACES], mpz_t pps[TRACES]) {
     }
 }
 
-// The main attack
+void clear_tweaks_plaintexts_pps(mpz_t tweaks[TRACES], mpz_t plaintexts[TRACES], mpz_t pps[TRACES]) {
+    for (int i = 0; i < TRACES; i++) {
+        mpz_clears(tweaks[i], plaintexts[i], pps[i], NULL);
+    }
+}
+
 void attack() {
     mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], pps[TRACES], key, key_1, key_2;
     unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000], key_2_bytes[16];
-    params params;
+    unsigned char interactions;
 
-    get_traces(tweaks, traces_start, traces_end, plaintexts, &params);
+    get_traces(tweaks, traces_start, traces_end, plaintexts, &interactions);
 
     calc_key(&key_2, key_2_bytes, tweaks, traces_start);
     gmp_printf("Key 2: %ZX\n", key_2);
 
     calc_ts(key_2_bytes, tweaks, ts);
     calc_pps(plaintexts, ts, pps);
-
     calc_key(&key_1, NULL, pps, traces_end);
+    clear_tweaks_plaintexts_pps(tweaks, plaintexts, pps);
     gmp_printf("Key 1: %ZX\n\n", key_1);
 
+    mpz_init(key);
     mpz_mul_2exp(key, key_1, 128);
     mpz_add(key, key, key_2);
     gmp_printf("Key: %064ZX\n", key);
-    printf("Interactions: %d\n", params.interactions);
+    printf("Interactions: %d\n", interactions);
+
+    mpz_clears(key, key_1, key_2, NULL);
 }
  
-// Initialises the target variables and starts the attack
 int main(int argc, char* argv[]) {
     signal(SIGINT, &cleanup);
 

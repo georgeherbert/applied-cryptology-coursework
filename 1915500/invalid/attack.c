@@ -173,6 +173,10 @@ void calc_remainders(int remainders[NUM_POINTS], point points[NUM_POINTS], point
         // printf("%d\n", remainders[i]);
     }
 
+    for (int i = 0; i < NUM_POINTS; i++) {
+        mpz_clears(multiplied_points[i].x, multiplied_points[i].y, NULL);
+    }
+
     mpz_clears(a_4, base, NULL);
 }
 
@@ -202,6 +206,12 @@ void chinese_remainder(int remainders[NUM_POINTS], mpz_t *key) {
     mpz_clears(product, pp, temp, NULL);
 }
 
+void clear_points() {
+    for (int i = 0; i < NUM_POINTS; i++) {
+        mpz_clears(points[i].x, points[i].y, NULL);
+    }
+}
+
 void attack() {
     point multiplied_points[NUM_POINTS];
     int remainders[NUM_POINTS];
@@ -213,6 +223,7 @@ void attack() {
     get_multiplied_points(multiplied_points, &interactions);
     calc_remainders(remainders, points, multiplied_points);
     chinese_remainder(remainders, &key);
+    clear_points();
 
     printf("Interactions: %d\n", interactions);
     gmp_printf("Key: %ZX\n", key);
