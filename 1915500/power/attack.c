@@ -1,7 +1,7 @@
 #include "attack.h"
 
 #define BUFFER_SIZE (80)
-#define TRACES (16)
+#define TRACES (18)
 
 pid_t pid = 0;
 
