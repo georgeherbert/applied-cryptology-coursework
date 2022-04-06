@@ -35,7 +35,7 @@ TARGET_OUT = TARGET.stdout
 W = 64 # Word length
 B = 2 ** W # Base
 
-THRESHOLD = 16
+THRESHOLD = 20
 
 TEST_MESSAGE = 0x123456789abcdef
 INITIAL_SAMPLES = 1000
@@ -146,6 +146,7 @@ def calc_d(n, rho_sq, l_n, omega, e):
 def attack():
     n, e = get_attack_params()
     l_n, omega, rho_sq = calc_montgomery_params(n)
+    print(omega, l_n, rho_sq)
     print(f"n (base 10): {n}\n\ne (base 10): {e}\n\nl_n (base 10): {l_n}\n\nomega (base 10): {omega}\n\nrho_sq (base 10): {rho_sq}\n")
 
     d, interactions = calc_d(n, rho_sq, l_n, omega, e)
