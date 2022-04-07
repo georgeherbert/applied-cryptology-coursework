@@ -263,10 +263,8 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
     mpz_inits(test_message, test_message_encrypted, NULL);
     mpz_set_ui(test_message, TEST_MESSAGE);
     mpz_powm(test_message_encrypted, test_message, *public_exponent, *modulus);
-    gmp_printf("%Zd\n\n", test_message_encrypted);
 
     mpz_set_ui(*private_exponent, 1);
-    // TODO: Temporary
     while (!test_private_exponent(private_exponent, public_exponent, modulus, &test_message, &test_message_encrypted)) {
         for (int i = 0; i < INITIAL_SAMPLES; i++) {
             mont_exp_next(&m_temps_bit_zero[i], &reductions_bit_zero[i], &m_temps[i], &ciphertext_monts[i], 0, modulus_limbs, omega, modulus, base);
@@ -283,17 +281,14 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
         } else {
             for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_set(m_temps[i], m_temps_bit_zero[i]);
         }
-
-        gmp_printf("%Zx\n", *private_exponent);
     }
-
-    gmp_printf("%Zx\n", *private_exponent);
 
     mpz_clears(test_message, test_message_encrypted, NULL);
     for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_clears(ciphertext_samples[i], ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
 }
 
 void attack(const char *config_file) {
+    clock_t tic = clock();
     mpz_t public_exponent, private_exponent, modulus, base, omega, rho_sq;
     mpz_inits(public_exponent, private_exponent, modulus, base, omega, rho_sq, NULL);
     int modulus_limbs, interactions = 0;
@@ -301,8 +296,14 @@ void attack(const char *config_file) {
     get_params(config_file, &public_exponent, &modulus);
     calc_params(&base, &omega, &rho_sq, &public_exponent, &modulus, &modulus_limbs);
     calc_private_exponent(&private_exponent, &public_exponent, &modulus, &modulus_limbs, &omega, &rho_sq, &base, &interactions);
+    
+    clock_t toc = clock();
 
-    // mpz_clears(public_exponent, modulus, base, omega, rho_sq, NULL);
+    printf("Attack time: %.2f seconds\n", ((double) toc - tic) / CLOCKS_PER_SEC);
+    printf("Interactions: %d\n", interactions);
+    gmp_printf("d (base 16): %Zx\n", private_exponent);
+
+    mpz_clears(public_exponent, private_exponent, modulus, omega, rho_sq, base, NULL);
 }
 
 int main(int argc, char* argv[]) {
