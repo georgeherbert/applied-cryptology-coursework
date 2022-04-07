@@ -3,6 +3,7 @@
 #define BUFFER_SIZE (80)
 #define WORD_LENGTH (64)
 #define INITIAL_SAMPLES (5000)
+#define TEST_MESSAGE (0x123456789abcdef)
 
 pid_t pid = 0;
 
@@ -159,6 +160,31 @@ void calc_private_exponent_setup(mpz_t *ciphertext_samples, unsigned int *cipher
     calc_m_temps_init(m_temps, ciphertext_monts, INITIAL_SAMPLES, rho_sq, modulus_limbs, omega, modulus, base);
 }
 
+int test_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_t *modulus, mpz_t *test_message, mpz_t *test_message_encrypted) {
+    int last_digit_zero = 0, last_digit_one = 0;
+    mpz_t private_exponent_zero, private_exponent_one, temp;
+    mpz_inits(private_exponent_zero, private_exponent_one, temp, NULL);
+    mpz_mul_ui(private_exponent_zero, *private_exponent, 2);
+    mpz_add_ui(private_exponent_one, private_exponent_zero, 1);
+
+    mpz_powm(temp, *test_message_encrypted, private_exponent_zero, *modulus);
+    last_digit_zero = mpz_cmp(temp, *test_message) == 0;
+
+    mpz_powm(temp, *test_message_encrypted, private_exponent_one, *modulus);
+    last_digit_one = mpz_cmp(temp, *test_message) == 0;
+
+    if (last_digit_zero) {
+        mpz_set(*private_exponent, private_exponent_zero);
+    }
+    else if (last_digit_one) {
+        mpz_set(*private_exponent, private_exponent_one);
+    }
+
+    mpz_clears(private_exponent_zero, private_exponent_one, temp, NULL);
+
+    return last_digit_zero || last_digit_one;
+}
+
 void mont_exp_next(mpz_t *m_temp_result, int *reduction_result, mpz_t *m_temp, mpz_t *ciphertext_mont, int bit_set, int *modulus_limbs, mpz_t *omega, mpz_t *modulus, mpz_t *base) {
     if (bit_set) {
         mont_mul(m_temp_result, m_temp, ciphertext_mont, modulus_limbs, omega, modulus, base);
@@ -233,9 +259,15 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
     for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_inits(m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
     calc_private_exponent_setup(ciphertext_samples, ciphertext_times, ciphertext_monts, m_temps, modulus, modulus_limbs, omega, rho_sq, base, interactions);
     
+    mpz_t test_message, test_message_encrypted;
+    mpz_inits(test_message, test_message_encrypted, NULL);
+    mpz_set_ui(test_message, TEST_MESSAGE);
+    mpz_powm(test_message_encrypted, test_message, *public_exponent, *modulus);
+    gmp_printf("%Zd\n\n", test_message_encrypted);
+
     mpz_set_ui(*private_exponent, 1);
     // TODO: Temporary
-    for (int x = 0; x < 64; x++) {
+    while (!test_private_exponent(private_exponent, public_exponent, modulus, &test_message, &test_message_encrypted)) {
         for (int i = 0; i < INITIAL_SAMPLES; i++) {
             mont_exp_next(&m_temps_bit_zero[i], &reductions_bit_zero[i], &m_temps[i], &ciphertext_monts[i], 0, modulus_limbs, omega, modulus, base);
             mont_exp_next(&m_temps_bit_one[i], &reductions_bit_one[i], &m_temps[i], &ciphertext_monts[i], 1, modulus_limbs, omega, modulus, base);
@@ -255,8 +287,10 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
         gmp_printf("%Zx\n", *private_exponent);
     }
 
-    // // TODO: Change the condition
-    for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_clears(ciphertext_samples[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], ciphertext_monts[i], NULL);
+    gmp_printf("%Zx\n", *private_exponent);
+
+    mpz_clears(test_message, test_message_encrypted, NULL);
+    for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_clears(ciphertext_samples[i], ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
 }
 
 void attack(const char *config_file) {
