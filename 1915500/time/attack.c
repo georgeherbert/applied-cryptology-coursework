@@ -2,8 +2,9 @@
 
 #define BUFFER_SIZE (80)
 #define WORD_LENGTH (64)
-#define INITIAL_SAMPLES (5000)
+#define INITIAL_SAMPLES (1000)
 #define TEST_MESSAGE (0x123456789abcdef)
+#define THRESHOLD (20)
 
 pid_t pid = 0;
 
@@ -124,10 +125,7 @@ int mont_mul(mpz_t *result, mpz_t *x, mpz_t *y, int *modulus_limbs, mpz_t *omega
 }
 
 void calc_ciphertext_monts(mpz_t *ciphertext_monts, mpz_t *ciphertext_samples, int num_samples, mpz_t *rho_sq, int *modulus_limbs, mpz_t *omega, mpz_t *modulus, mpz_t *base) {
-    for (int i = 0; i < num_samples; i++) {
-        mpz_init(ciphertext_monts[i]);
-        mont_mul(&ciphertext_monts[i], &ciphertext_samples[i], rho_sq, modulus_limbs, omega, modulus, base);
-    }
+    for (int i = 0; i < num_samples; i++) mont_mul(&ciphertext_monts[i], &ciphertext_samples[i], rho_sq, modulus_limbs, omega, modulus, base);
 }
 
 void mont_exp_init(mpz_t *result, mpz_t *x, mpz_t *rho_sq, int* modulus_limbs, mpz_t *omega, mpz_t *modulus, mpz_t *base) {
@@ -144,20 +142,13 @@ void mont_exp_init(mpz_t *result, mpz_t *x, mpz_t *rho_sq, int* modulus_limbs, m
 }
 
 void calc_m_temps_init(mpz_t *m_temps, mpz_t *ciphertext_monts, int num_samples, mpz_t *rho_sq, int *modulus_limbs, mpz_t *omega, mpz_t *modulus, mpz_t *base) {
-    for (int i = 0; i < num_samples; i++) {
-        mpz_init(m_temps[i]);
-        mont_exp_init(&m_temps[i], &ciphertext_monts[i], rho_sq, modulus_limbs, omega, modulus, base);
-    }
+    for (int i = 0; i < num_samples; i++) mont_exp_init(&m_temps[i], &ciphertext_monts[i], rho_sq, modulus_limbs, omega, modulus, base);
 }
 
-void calc_private_exponent_setup(mpz_t *ciphertext_samples, unsigned int *ciphertext_times, mpz_t *ciphertext_monts, mpz_t *m_temps, mpz_t *modulus, int *modulus_limbs, mpz_t *omega, mpz_t *rho_sq, mpz_t *base, int *interactions) {
-    gmp_randstate_t state;
-    gmp_randinit_default(state);
-    gmp_randseed_ui(state, time(NULL));
-
-    gen_ciphertext_samples_times(ciphertext_samples, ciphertext_times, modulus, INITIAL_SAMPLES, &state, interactions);
-    calc_ciphertext_monts(ciphertext_monts, ciphertext_samples, INITIAL_SAMPLES, rho_sq, modulus_limbs, omega, modulus, base);
-    calc_m_temps_init(m_temps, ciphertext_monts, INITIAL_SAMPLES, rho_sq, modulus_limbs, omega, modulus, base);
+void calc_private_exponent_setup(mpz_t *ciphertext_samples, unsigned int *ciphertext_times, mpz_t *ciphertext_monts, mpz_t *m_temps, int num_samples, gmp_randstate_t *state, mpz_t *modulus, int *modulus_limbs, mpz_t *omega, mpz_t *rho_sq, mpz_t *base, int *interactions) {
+    gen_ciphertext_samples_times(ciphertext_samples, ciphertext_times, modulus, num_samples, state, interactions);
+    calc_ciphertext_monts(ciphertext_monts, ciphertext_samples, num_samples, rho_sq, modulus_limbs, omega, modulus, base);
+    calc_m_temps_init(m_temps, ciphertext_monts, num_samples, rho_sq, modulus_limbs, omega, modulus, base);
 }
 
 int test_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_t *modulus, mpz_t *test_message, mpz_t *test_message_encrypted) {
@@ -207,10 +198,10 @@ double calc_m_average(unsigned int **m_array, unsigned int *m_num) {
 }
 
 void calc_m_averages(double *m_1, double *m_2, double *m_3, double *m_4, int *reductions_bit_zero, int* reductions_bit_one, unsigned int *ciphertext_times, int num_samples) {
-    unsigned int **m_1_array = malloc(sizeof(unsigned int *) * INITIAL_SAMPLES);
-    unsigned int **m_2_array = malloc(sizeof(unsigned int *) * INITIAL_SAMPLES);
-    unsigned int **m_3_array = malloc(sizeof(unsigned int *) * INITIAL_SAMPLES);
-    unsigned int **m_4_array = malloc(sizeof(unsigned int *) * INITIAL_SAMPLES);
+    unsigned int **m_1_array = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **m_2_array = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **m_3_array = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **m_4_array = malloc(sizeof(unsigned int *) * num_samples);
 
     unsigned int m_1_num = 0, m_2_num = 0, m_3_num = 0, m_4_num = 0;
 
@@ -255,36 +246,68 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
     mpz_t *m_temps_bit_one = malloc(sizeof(mpz_t) * INITIAL_SAMPLES);
     int *reductions_bit_zero = malloc(sizeof(int) * INITIAL_SAMPLES);
     int *reductions_bit_one = malloc(sizeof(int) * INITIAL_SAMPLES);
+    gmp_randstate_t state;
+    gmp_randinit_default(state);
+    gmp_randseed_ui(state, time(NULL));
 
-    for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_inits(m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
-    calc_private_exponent_setup(ciphertext_samples, ciphertext_times, ciphertext_monts, m_temps, modulus, modulus_limbs, omega, rho_sq, base, interactions);
+    for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_inits(ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
+    calc_private_exponent_setup(ciphertext_samples, ciphertext_times, ciphertext_monts, m_temps, INITIAL_SAMPLES, &state, modulus, modulus_limbs, omega, rho_sq, base, interactions);
     
     mpz_t test_message, test_message_encrypted;
     mpz_inits(test_message, test_message_encrypted, NULL);
     mpz_set_ui(test_message, TEST_MESSAGE);
     mpz_powm(test_message_encrypted, test_message, *public_exponent, *modulus);
 
+    int num_samples = INITIAL_SAMPLES;
+
     mpz_set_ui(*private_exponent, 1);
     while (!test_private_exponent(private_exponent, public_exponent, modulus, &test_message, &test_message_encrypted)) {
-        for (int i = 0; i < INITIAL_SAMPLES; i++) {
+        for (int i = 0; i < num_samples; i++) {
             mont_exp_next(&m_temps_bit_zero[i], &reductions_bit_zero[i], &m_temps[i], &ciphertext_monts[i], 0, modulus_limbs, omega, modulus, base);
             mont_exp_next(&m_temps_bit_one[i], &reductions_bit_one[i], &m_temps[i], &ciphertext_monts[i], 1, modulus_limbs, omega, modulus, base);
         }
+
         double m_1, m_2, m_3, m_4;
-        calc_m_averages(&m_1, &m_2, &m_3, &m_4, reductions_bit_zero, reductions_bit_one, ciphertext_times, INITIAL_SAMPLES);
+        calc_m_averages(&m_1, &m_2, &m_3, &m_4, reductions_bit_zero, reductions_bit_one, ciphertext_times, num_samples);
         double diff = fabs(m_1 - m_2) - fabs(m_3 - m_4);
         mpz_mul_ui(*private_exponent, *private_exponent, 2);
 
         if (diff > 0) {
             mpz_add_ui(*private_exponent, *private_exponent, 1);
-            for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_set(m_temps[i], m_temps_bit_one[i]);
+            for (int i = 0; i < num_samples; i++) mpz_set(m_temps[i], m_temps_bit_one[i]);
         } else {
-            for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_set(m_temps[i], m_temps_bit_zero[i]);
+            for (int i = 0; i < num_samples; i++) mpz_set(m_temps[i], m_temps_bit_zero[i]);
         }
+        
+        if (fabs(diff) < THRESHOLD) {
+            int new_num_samples = num_samples * 2;
+            ciphertext_samples = realloc(ciphertext_samples, sizeof(mpz_t) * new_num_samples);
+            ciphertext_times = realloc(ciphertext_times, sizeof(unsigned int) * new_num_samples);
+            ciphertext_monts = realloc(ciphertext_monts, sizeof(mpz_t) * new_num_samples);
+            m_temps = realloc(m_temps, sizeof(mpz_t) * new_num_samples);
+            m_temps_bit_zero = realloc(m_temps_bit_zero, sizeof(mpz_t) * new_num_samples);
+            m_temps_bit_one = realloc(m_temps_bit_one, sizeof(mpz_t) * new_num_samples);
+            reductions_bit_zero = realloc(reductions_bit_zero, sizeof(int) * new_num_samples);
+            reductions_bit_one = realloc(reductions_bit_one, sizeof(int) * new_num_samples);
+
+            for (int i = num_samples; i < new_num_samples; i++) mpz_inits(ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
+
+            gen_ciphertext_samples_times(&ciphertext_samples[num_samples], &ciphertext_times[num_samples], modulus, num_samples, &state, interactions);
+            calc_ciphertext_monts(ciphertext_monts, ciphertext_samples, new_num_samples, rho_sq, modulus_limbs, omega, modulus, base);
+            calc_m_temps_init(m_temps, ciphertext_monts, new_num_samples, rho_sq, modulus_limbs, omega, modulus, base);
+
+            mpz_set_ui(*private_exponent, 1);
+
+            num_samples = new_num_samples;
+
+            printf("Reallocating...\n");
+        }
+
+
     }
 
     mpz_clears(test_message, test_message_encrypted, NULL);
-    for (int i = 0; i < INITIAL_SAMPLES; i++) mpz_clears(ciphertext_samples[i], ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
+    for (int i = 0; i < num_samples; i++) mpz_clears(ciphertext_samples[i], ciphertext_monts[i], m_temps[i], m_temps_bit_zero[i], m_temps_bit_one[i], NULL);
 }
 
 void attack(const char *config_file) {
