@@ -74,13 +74,15 @@ int send_to_oracle(mpz_t* f_num, params* params) {
 
     int error_code;
     interact(&error_code, &value, params);
+
+    mpz_clear(value);
     // printf("Error code: %d\n", error_code);
     return error_code;
 }
 
 // Step 1 of the attack
 void step_1(params* params, mpz_t* f_1) {
-    mpz_init_set_ui(*f_1, 2);
+    mpz_set_ui(*f_1, 2);
     while (send_to_oracle(f_1, params) != 1) {
         mpz_mul_ui(*f_1, *f_1, 2);
     }
@@ -89,7 +91,7 @@ void step_1(params* params, mpz_t* f_1) {
 // Step 2 of the attack
 void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
     mpz_t temp, temp_2;
-    mpz_inits(*f_2, temp, temp_2, NULL);
+    mpz_inits(temp, temp_2, NULL);
     mpz_add(temp, params->modulus, params->b);
     mpz_fdiv_q(temp, temp, params->b);
     mpz_fdiv_q_ui(temp_2, *f_1, 2);
@@ -98,12 +100,13 @@ void step_2(params* params, mpz_t* f_1, mpz_t* f_2) {
         mpz_add(*f_2, *f_2, temp_2);
         // gmp_printf("f_2: %Zd\n", *f_2);
     }
+    mpz_clears(temp, temp_2, NULL);
 }
 
 // Step 3 of the attack
 void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
     mpz_t message_min, message_max, f_tmp, i, f_3, temp, temp_2;
-    mpz_inits(*encoded_message, message_min, message_max, f_tmp, i, f_3, temp, temp_2, NULL);
+    mpz_inits(message_min, message_max, f_tmp, i, f_3, temp, temp_2, NULL);
     
     mpz_cdiv_q(message_min, params->modulus, *f_2);
     mpz_add(temp, params->modulus, params->b);
@@ -130,6 +133,7 @@ void step_3(params* params, mpz_t* f_2, mpz_t* encoded_message) {
         }
     }
     mpz_set(*encoded_message, message_min);
+    mpz_clears(message_min, message_max, f_tmp, i, f_3, temp, temp_2, NULL);
 }
 
 // Converts the mpz_t encoded_encoded message into an array of bytes of the correct length
@@ -230,7 +234,6 @@ void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
     memcpy(message_bytes, db + message_index, message_size);
 
     // Converts the message from an array of bytes to a mpz_t
-    mpz_init(*message);
     mpz_import(*message, message_size, 1, sizeof(char), -1, 0, message_bytes);
 }
 
@@ -240,7 +243,7 @@ void attack(const char *config_file) {
     params params;
     mpz_t f_1, f_2, encoded_message, message;
 
-    mpz_inits(params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
+    mpz_inits(f_1, f_2, encoded_message, message, params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
 
     params.interactions = 0;
     get_params(config_file, &params);
@@ -258,6 +261,8 @@ void attack(const char *config_file) {
     printf("Attack complete\nTime taken: %.2f seconds.\n", ((double) toc - tic) / CLOCKS_PER_SEC);
     gmp_printf("Target material (base 16): %Zx\n", message);
     printf("Interactions (base 10): %llu\n", params.interactions);
+
+    mpz_clears(f_1, f_2, encoded_message, message, params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
 }
  
 // Initialises the target variables and starts the attack
