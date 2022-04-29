@@ -14,11 +14,9 @@ typedef struct {
     mpz_t modulus;
     mpz_t public_exponent;
     mpz_t label;
-    char *label_bytes;
-    unsigned long long int label_size;
+    unsigned int label_size;
     mpz_t ciphertext;
-    unsigned long long int ciphertext_size;
-    char *ciphertext_size_bytes;
+    unsigned int ciphertext_size;
     mpz_t b;
     unsigned long long int interactions;
 } params;
@@ -37,49 +35,24 @@ void cleanup(int s){
 // Gets the parameters needed for the attack
 void get_params(const char *config_file, params* params) {
     FILE *file = fopen(config_file, "r");
-    char modulus_bytes[65536], public_exponent_bytes[65536], label_bytes[65536], ciphertext_bytes[65536];
-    char *label_bytes_split, *ciphertext_bytes_split;
-    char *search = ":";
 
-    // Reads the config file line by line
-    fgets(modulus_bytes, sizeof(modulus_bytes), file);
-    fgets(public_exponent_bytes, sizeof(public_exponent_bytes), file);
-    fgets(label_bytes, sizeof(label_bytes), file);
-    fgets(ciphertext_bytes, sizeof(ciphertext_bytes), file);
-
-    mpz_inits(params->modulus, params->public_exponent, params->label, params->ciphertext, params->b, NULL);
-
-    // Assigns the modulus and public_exponent parameters
-    mpz_set_str(params->modulus, modulus_bytes, 16);
-    mpz_set_str(params->public_exponent, public_exponent_bytes, 16);
-
-    // Assigns the label related parameters
-    label_bytes[strcspn(label_bytes, "\n")] = 0;
-    params->label_bytes = malloc(strlen(label_bytes) + 1);
-    strcpy(params->label_bytes, label_bytes);
-    label_bytes_split = strtok(label_bytes, search);
-    params->label_size = strtol(label_bytes_split, NULL, 16);
-    label_bytes_split = strtok(NULL, search);
-    mpz_set_str(params->label, label_bytes_split, 16);
-
-    // Assigns the ciphertext related parameters
-    ciphertext_bytes_split = strtok(ciphertext_bytes, search);
-    params->ciphertext_size_bytes = malloc(strlen(ciphertext_bytes_split) + 1);
-    strcpy(params->ciphertext_size_bytes, ciphertext_bytes_split);
-    params->ciphertext_size = strtol(ciphertext_bytes_split, NULL, 16);
-    ciphertext_bytes_split = strtok(NULL, search);
-    mpz_set_str(params->ciphertext, ciphertext_bytes_split, 16);
+    gmp_fscanf(file, "%Zx\n", params->modulus);
+    gmp_fscanf(file, "%Zx\n", params->public_exponent);
+    fscanf(file, "%x:", &params->label_size);
+    gmp_fscanf(file, "%Zx\n", params->label);
+    fscanf(file, "%x:", &params->ciphertext_size);
+    gmp_fscanf(file, "%Zx\n", params->ciphertext);
 
     mpz_ui_pow_ui(params->b, 2, 8 * (params->ciphertext_size - 1));
-    
+
     fclose(file);
 }
 
 // Interacts with the device
-void interact(int* error_code, const char* value, params* params) {
+void interact(int* error_code, mpz_t *value, params* params) {
     params->interactions += 1;
-    fprintf(target_in, "%s\n", params->label_bytes);
-    fprintf(target_in, "%s:%s\n", params->ciphertext_size_bytes, value);
+    gmp_fprintf(target_in, "%x:%Z0*x\n", params->label_size, params->label_size * 2, params->label);
+    gmp_fprintf(target_in, "%x:%0*Zx\n", params->ciphertext_size, params->ciphertext_size * 2, *value);
     fflush(target_in);
     fscanf(target_out, "%d", error_code);
 }
@@ -99,12 +72,8 @@ int send_to_oracle(mpz_t* f_num, params* params) {
     mpz_mul(value, value, params->ciphertext);
     mpz_mod(value, value, params->modulus);
 
-    // The value needs to be prepended so that it is the correct length
-    char value_bytes[params->ciphertext_size * 2 + 1];
-    prepend_zeros(value_bytes, mpz_get_str(NULL, 16, value), params->ciphertext_size * 2);
-
     int error_code;
-    interact(&error_code, value_bytes, params);
+    interact(&error_code, &value, params);
     // printf("Error code: %d\n", error_code);
     return error_code;
 }
@@ -249,6 +218,11 @@ void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
     mpz_export(label_bytes, NULL, 1, sizeof(char), -1, 0, params->label);
     SHA1(label_bytes, params->label_size, lhash);
     memcpy(lhash_, db, 20);
+    printf("%s %s\n", lhash, lhash_);
+
+    printf("DB (base 16): ");
+    for (int i = 0; i < remainder_size; i++) printf("%x", db[i]);
+    printf("\n\n");
 
     // Extracts the message from db
     const int message_index = find_message_index(db, remainder_size);
@@ -267,6 +241,8 @@ void attack(const char *config_file) {
     params params;
     mpz_t f_1, f_2, encoded_message, message;
 
+    mpz_inits(params.modulus, params.public_exponent, params.label, params.ciphertext, params.b, NULL);
+
     params.interactions = 0;
     get_params(config_file, &params);
 
@@ -276,12 +252,12 @@ void attack(const char *config_file) {
     step_2(&params, &f_1, &f_2);
     gmp_printf("f_2 (base 10): %Zd\n", f_2);
     step_3(&params, &f_2, &encoded_message);
-    gmp_printf("Encoded message (base 10): %Zd\n\n", encoded_message);
+    gmp_printf("Encoded message (base 16): %Zx\n", encoded_message);
     decode(&params, &encoded_message, &message);
     
     clock_t toc = clock();
     printf("Attack complete\nTime taken: %.2f seconds.\n", ((double) toc - tic) / CLOCKS_PER_SEC);
-    gmp_printf("Target material (base 10): %Zd\n", message);
+    gmp_printf("Target material (base 16): %Zx\n", message);
     printf("Interactions (base 10): %llu\n", params.interactions);
 }
  
