@@ -218,7 +218,6 @@ void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
     mpz_export(label_bytes, NULL, 1, sizeof(char), -1, 0, params->label);
     SHA1(label_bytes, params->label_size, lhash);
     memcpy(lhash_, db, 20);
-    printf("%s %s\n", lhash, lhash_);
 
     printf("DB (base 16): ");
     for (int i = 0; i < remainder_size; i++) printf("%x", db[i]);
