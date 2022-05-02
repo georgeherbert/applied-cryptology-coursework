@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
-#include <time.h>
+#include <sys/time.h>
 #include <math.h>
 #include <openssl/aes.h>
 #include <gmp.h>

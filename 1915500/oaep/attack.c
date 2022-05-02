@@ -239,7 +239,10 @@ void decode(params* params, mpz_t* encoded_message, mpz_t* message) {
 
 // The main attack
 void attack(const char *config_file) {
-    clock_t tic = clock();
+    struct timeval timstr;
+    gettimeofday(&timstr, NULL);
+    double tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
     params params;
     mpz_t f_1, f_2, encoded_message, message;
 
@@ -254,11 +257,13 @@ void attack(const char *config_file) {
     step_2(&params, &f_1, &f_2);
     gmp_printf("f_2 (base 10): %Zd\n", f_2);
     step_3(&params, &f_2, &encoded_message);
-    gmp_printf("Encoded message (base 16): %Zx\n", encoded_message);
+    gmp_printf("Encoded message (base 16): %Zx\n\n", encoded_message);
     decode(&params, &encoded_message, &message);
     
-    clock_t toc = clock();
-    printf("Attack complete\nTime taken: %.2f seconds.\n", ((double) toc - tic) / CLOCKS_PER_SEC);
+    gettimeofday(&timstr, NULL);
+    double toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
+    printf("Attack time: %.2f seconds\n", toc - tic);
     gmp_printf("Target material (base 16): %Zx\n", message);
     printf("Interactions (base 10): %llu\n", params.interactions);
 

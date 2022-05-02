@@ -299,11 +299,7 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
             mpz_set_ui(*private_exponent, 1);
 
             num_samples = new_num_samples;
-
-            printf("Reallocating...\n");
         }
-
-
     }
 
     mpz_clears(test_message, test_message_encrypted, NULL);
@@ -311,7 +307,10 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
 }
 
 void attack(const char *config_file) {
-    clock_t tic = clock();
+    struct timeval timstr;
+    gettimeofday(&timstr, NULL);
+    double tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
     mpz_t public_exponent, private_exponent, modulus, base, omega, rho_sq;
     mpz_inits(public_exponent, private_exponent, modulus, base, omega, rho_sq, NULL);
     int modulus_limbs, interactions = 0;
@@ -320,11 +319,12 @@ void attack(const char *config_file) {
     calc_params(&base, &omega, &rho_sq, &public_exponent, &modulus, &modulus_limbs);
     calc_private_exponent(&private_exponent, &public_exponent, &modulus, &modulus_limbs, &omega, &rho_sq, &base, &interactions);
     
-    clock_t toc = clock();
+    gettimeofday(&timstr, NULL);
+    double toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 
-    printf("Attack time: %.2f seconds\n", ((double) toc - tic) / CLOCKS_PER_SEC);
-    printf("Interactions: %d\n", interactions);
-    gmp_printf("d (base 16): %Zx\n", private_exponent);
+    printf("Attack time: %.2f seconds\n", toc - tic);
+    gmp_printf("Target material (base 16): %Zx\n", private_exponent);
+    printf("Interactions (base 10): %d\n", interactions);
 
     mpz_clears(public_exponent, private_exponent, modulus, omega, rho_sq, base, NULL);
 }

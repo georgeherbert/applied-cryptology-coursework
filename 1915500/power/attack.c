@@ -198,6 +198,10 @@ void clear_tweaks_plaintexts_pps(mpz_t tweaks[TRACES], mpz_t plaintexts[TRACES],
 }
 
 void attack() {
+    struct timeval timstr;
+    gettimeofday(&timstr, NULL);
+    double tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
     mpz_t tweaks[TRACES], plaintexts[TRACES], ts[TRACES], pps[TRACES], key, key_1, key_2;
     unsigned char traces_start[TRACES][5000], traces_end[TRACES][5000], key_2_bytes[16];
     unsigned char interactions;
@@ -216,8 +220,13 @@ void attack() {
     mpz_init(key);
     mpz_mul_2exp(key, key_1, 128);
     mpz_add(key, key, key_2);
-    gmp_printf("Key: %064ZX\n", key);
-    printf("Interactions: %d\n", interactions);
+
+    gettimeofday(&timstr, NULL);
+    double toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
+    printf("Attack time: %.2f seconds\n", toc - tic);
+    gmp_printf("Target material (base 16): %064ZX\n", key);
+    printf("Interactions (base 10): %d\n", interactions);
 
     mpz_clears(key, key_1, key_2, NULL);
 }

@@ -169,6 +169,10 @@ void clear_points() {
 }
 
 void attack() {
+    struct timeval timstr;
+    gettimeofday(&timstr, NULL);
+    double tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
     point multiplied_points[NUM_POINTS];
     int remainders[NUM_POINTS];
     unsigned char interactions = 0;
@@ -181,8 +185,12 @@ void attack() {
     chinese_remainder(remainders, &key);
     clear_points();
 
-    printf("Interactions: %d\n", interactions);
-    gmp_printf("Key: %ZX\n", key);
+    gettimeofday(&timstr, NULL);
+    double toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
+
+    printf("Attack time: %.2f seconds\n", toc - tic);
+    gmp_printf("Target material (base 16): %ZX\n", key);
+    printf("Interactions (base 10): %d\n", interactions);
 
     mpz_clear(key);
 }

@@ -4,7 +4,7 @@ p = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
 a = 0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc
 
 ORDER_MIN = 1000000
-ORDER_MAX = 9999999
+ORDER_MAX = 2000000
 
 FF = GF(p)
 
