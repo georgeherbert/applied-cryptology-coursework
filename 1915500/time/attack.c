@@ -186,7 +186,7 @@ void mont_exp_next(mpz_t *m_temp_result, int *reduction_result, mpz_t *m_temp, m
     }
 }
 
-double calc_m_average(unsigned int **m_array, unsigned int *m_num) {
+double calc_m(unsigned int **m_array, unsigned int *m_num) {
     unsigned long long sum = 0;
     for (int i = 0; i < *m_num; i++) {
         sum += *m_array[i];
@@ -197,44 +197,44 @@ double calc_m_average(unsigned int **m_array, unsigned int *m_num) {
     return average;
 }
 
-void calc_m_averages(double *m_1, double *m_2, double *m_3, double *m_4, int *reductions_bit_zero, int* reductions_bit_one, unsigned int *ciphertext_times, int num_samples) {
-    unsigned int **m_1_array = malloc(sizeof(unsigned int *) * num_samples);
-    unsigned int **m_2_array = malloc(sizeof(unsigned int *) * num_samples);
-    unsigned int **m_3_array = malloc(sizeof(unsigned int *) * num_samples);
-    unsigned int **m_4_array = malloc(sizeof(unsigned int *) * num_samples);
+void calc_ms(double *m_1, double *m_2, double *m_3, double *m_4, int *reductions_bit_zero, int* reductions_bit_one, unsigned int *ciphertext_times, int num_samples) {
+    unsigned int **s_1 = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **s_2 = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **s_3 = malloc(sizeof(unsigned int *) * num_samples);
+    unsigned int **s_4 = malloc(sizeof(unsigned int *) * num_samples);
 
-    unsigned int m_1_num = 0, m_2_num = 0, m_3_num = 0, m_4_num = 0;
+    unsigned int s_1_num = 0, s_2_num = 0, s_3_num = 0, s_4_num = 0;
 
     for (int i = 0; i < num_samples; i++) {
         if (reductions_bit_zero[i]) {
-            m_3_array[m_3_num] = &ciphertext_times[i];
-            m_3_num++;
+            s_3[s_3_num] = &ciphertext_times[i];
+            s_3_num++;
         }
         else {
-            m_4_array[m_4_num] = &ciphertext_times[i];
-            m_4_num++;
+            s_4[s_4_num] = &ciphertext_times[i];
+            s_4_num++;
         }
     }
     for (int i = 0; i < num_samples; i++) {
         if (reductions_bit_one[i]) {
-            m_1_array[m_1_num] = &ciphertext_times[i];
-            m_1_num++;
+            s_1[s_1_num] = &ciphertext_times[i];
+            s_1_num++;
         }
         else {
-            m_2_array[m_2_num] = &ciphertext_times[i];
-            m_2_num++;
+            s_2[s_2_num] = &ciphertext_times[i];
+            s_2_num++;
         }
     }
 
-    *m_1 = calc_m_average(m_1_array, &m_1_num);
-    *m_2 = calc_m_average(m_2_array, &m_2_num);
-    *m_3 = calc_m_average(m_3_array, &m_3_num);
-    *m_4 = calc_m_average(m_4_array, &m_4_num);
+    *m_1 = calc_m(s_1, &s_1_num);
+    *m_2 = calc_m(s_2, &s_2_num);
+    *m_3 = calc_m(s_3, &s_3_num);
+    *m_4 = calc_m(s_4, &s_4_num);
 
-    free(m_1_array);
-    free(m_2_array);
-    free(m_3_array);
-    free(m_4_array);
+    free(s_1);
+    free(s_2);
+    free(s_3);
+    free(s_4);
 }
 
 void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_t *modulus, int *modulus_limbs, mpz_t *omega, mpz_t *rho_sq, mpz_t *base, int *interactions) {
@@ -268,7 +268,7 @@ void calc_private_exponent(mpz_t *private_exponent, mpz_t *public_exponent, mpz_
         }
 
         double m_1, m_2, m_3, m_4;
-        calc_m_averages(&m_1, &m_2, &m_3, &m_4, reductions_bit_zero, reductions_bit_one, ciphertext_times, num_samples);
+        calc_ms(&m_1, &m_2, &m_3, &m_4, reductions_bit_zero, reductions_bit_one, ciphertext_times, num_samples);
         double diff = fabs(m_1 - m_2) - fabs(m_3 - m_4);
         mpz_mul_ui(*private_exponent, *private_exponent, 2);
 
