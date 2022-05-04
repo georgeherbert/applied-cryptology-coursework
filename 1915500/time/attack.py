@@ -35,10 +35,10 @@ TARGET_OUT = TARGET.stdout
 W = 64 # Word length
 B = 2 ** W # Base
 
-THRESHOLD = 20
+THRESHOLD = 5
 
 TEST_MESSAGE = 0x123456789abcdef
-INITIAL_SAMPLES = 1000
+INITIAL_SAMPLES = 64
 
 def get_attack_params():
     with open(sys.argv[2], "r") as config:
@@ -131,7 +131,8 @@ def calc_d(n, rho_sq, l_n, omega, e):
             m_temps = [i[0] for i in ciphertext_mont_bit_zero]
         
         if abs(diff) < THRESHOLD:
-            ciphertext_samples_new, ciphertext_times_new = gen_ciphertext_samples_times(n, INITIAL_SAMPLES)
+            ciphertext_samples_new, ciphertext_times_new = gen_ciphertext_samples_times(n, interactions)
+            interactions *= 2
             ciphertext_samples += ciphertext_samples_new
             ciphertext_times += ciphertext_times_new
 

@@ -2,9 +2,9 @@
 
 #define BUFFER_SIZE (80)
 #define WORD_LENGTH (64)
-#define INITIAL_SAMPLES (1000)
+#define INITIAL_SAMPLES (64)
 #define TEST_MESSAGE (0x123456789abcdef)
-#define THRESHOLD (20)
+#define THRESHOLD (5)
 
 pid_t pid = 0;
 
