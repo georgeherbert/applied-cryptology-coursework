@@ -14,19 +14,4 @@ Q.4 Imagine that the target device uses a key refreshing mechanism, st.  k
     standard cryptanalysis, irrespective of the context), and b) effective
     (i.e., as used concretely in this context)  security levels of the EC-
     DLP associated with this curve.
-
-If the device was used in the Elliptic-curve Diffie-Hellman (ECDH), an 
-attack may still be feasible. In ECDH, Alice selects a private key 
-d_A ∈ [1, n – 1] where n is the size of E(𝔽_p) where 𝔽_p is the field 
-the curve is defined over, and a public key Q_A = d_A × G, where G is 
-the generator. Bob also selects a private key d_B ∈ [1, n – 1] and a 
-public key Q_B = d_B × G. Alice then computes 
-d_A × Q_B = d_A × d_B × G = (x_k, y_k). Bob also computes 
-d_B × Q_A = d_B × d_A × G = (x_k, y_k). The shared secret is x_k. 
-If an attacker implemented a man-in-the-middle attack, since the 
-device performs no point validation, an attacker could intercept Alice’s
-public key Q_A, and Bob’s public key Q_B, and forward the point at infinity
-to both Alice and Bob. As a result of this, Alice and Bob would both
-compute d_A × 𝓞 = 𝓞 and d_B × 𝓞 = 𝓞. Therefore, the secret key x_k 
-would be 0. The attacker could therefore recover the secret key with 
-probability 1.
+    
