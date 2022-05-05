@@ -1,13 +1,106 @@
 Q.1 An obvious countermeasure against this attack is to validate the input
     (and potentially output) point; this is in fact a *required* step in
     most standards.  Explain how this validation procedure works.
+
+There are several stages involved in validating ECC curve points.
+
+When an external entity inputs an (x, y) coordinate, one must first confirm 
+that the x-value and y-value are lower than the field modulus. This 
+validation check is vital because some devices may perform elliptic curve 
+operations incorrectly for coordinates greater than the modulus.
+
+Having confirmed this, one must validate that the coordinate is a point on 
+the curve, which can be done by simply testing whether the coordinates 
+satisfy the curve equation. Often coordinates are transmitted using the 
+compressed form—the external entity supplies both the x-value and an 
+additional byte specifying whether the y-value is odd or even. In such 
+cases, one should solve the equation for the provided x-value and reject 
+the point if the y^2 calculated does not have a valid root in the field.
+
+Some implementations may also be required to validate that the coordinate 
+is not the point at infinity because the point at infinity multiplied by 
+any scalar value is still the point at infinity. This multiplication is an 
+issue in implementations that require both parties to contribute to the 
+outcome of an operation (e.g. a key exchange).
+
+Another important validation step is checking that the point on the curve 
+belongs to the correct subgroup, which one can do by confirming that n × P 
+= 𝓞, where n is the size of E(𝔽_p) where 𝔽_p is the field the curve is 
+defined over. However, this is unnecessary for the P-256 curve since it 
+only has one sizeable prime order subgroup.
+
+---------------------------------------------------------------------------
+
 Q.2 If the protocol for interaction had used point compression, this could
     act as a countermeasure against the attack.  Explain what this concept
     means, and why the claimed countermeasure could be effective.
+
+Elliptic curves over finite fields (in the Weierstraß form) have either 
+zero or two points per x-value. For a given x-value, there is no solution 
+if y^2 does not have a square root in the field. In contrast, if y^2 does 
+have a square root in the field, there are two solutions, (x, y) and (x, 
+p – y), where p defines the finite field 𝔽_p. Therefore, to reduce the 
+amount of data sent, one can send elliptic curve points can in their 
+compressed form, which comprises an x-value and the parity of the y-value.
+
+Depending on the implementation, one can send elliptic curve points either 
+in their compressed or uncompressed form; some implementations accept 
+points using either form.
+
+Point compressed acts as a countermeasure against the attack. For a 
+provided x-value, if there is no solution, the point is rejected. 
+Otherwise, the device calculates one of the two valid y-values depending on 
+the parity of the y value. Therefore, the countermeasure prevents points on 
+invalid curves from being used to mount an invalid curve attack.
+
+---------------------------------------------------------------------------
+
 Q.3 As with most side-channel attacks, fewer interactions with the target
     device is preferable.  Present a formal argument (i.e., one not based
     on experimental evidence alone) that explains how many interactions you
     expect to make in this attack.
+
+There are several factors to consider in this attack. These include the 
+total attack time, the computing power of the device, and the desired 
+number of interactions.
+
+For example, the attacker could acquire the target material with only one 
+interaction with the device with unlimited computing power or time. The 
+attacker could input a single point on the target device, record the point 
+output, and then attempt every possible private key value sequentially 
+until they acquire the same point.
+
+Similarly, if the number of interactions with the device was not 
+significant, the attacker could use many points on invalid curves with very 
+low orders. Doing so would minimise the number of potential key values they 
+would have to attempt for each point.
+
+The relationship between total attack time, the device's computing power, 
+and the desired number of interactions can be modelled with an equation. If 
+the attacker were to have i interactions with the target device whereby 
+each point was to have approximately the same order, the order of each 
+point would be approximately n^(1 / i), where n is the size of E(𝔽_p) where 
+𝔽_p is the field the curve is defined over. The expected number of point 
+additions the attacker would need to compute for each point of order 
+n^(1 / i) would be n^(1 / i) / 2. Therefore, the total number of point 
+additions expected in the attack would be n^(1 / i) / 2 * i. This number 
+can be multiplied by the time taken to compute each point addition t to 
+acquire the expected total attack time T = n^(1 / i) / 2 * i * t.
+
+This equation can be rearranged to give T / t = n^(1 / i) / 2 * i. We can 
+think about T / t as the total number of addition operations in the attack, 
+giving a relationship between the number of interactions and the expected 
+number of addition operations a = n^(1 / i) / 2 * i. This relationship 
+shows that the cost of mounting an invalid curve attack to solve a given 
+ECDLP instance increases massively as the number of interactions decreases.
+
+In my implementation, I found that using points on invalid curves with an 
+approximate order of 1,500,000 meant that I required 13 points. Therefore, 
+I completed the attack using a standard computer in approximately ten 
+seconds.
+
+---------------------------------------------------------------------------
+
 Q.4 Imagine that the target device uses a key refreshing mechanism, st.  k
     will be different for each interaction.  Providing some experimental
     evidence where appropriate, assess the  a) theoretical (i.e., by using
@@ -15,3 +108,39 @@ Q.4 Imagine that the target device uses a key refreshing mechanism, st.  k
     (i.e., as used concretely in this context)  security levels of the EC-
     DLP associated with this curve.
     
+If the target device used a key refreshing mechanism such that the device 
+used a new key for each interaction, then the invalid curve attack 
+implemented in its current form would collect partial information about 
+several keys. If the key refresh were predictable for each interaction, the 
+attacker would be able to alter the attack to take account of this and 
+still recover the key. For example, if the key increased by one each 
+interaction.
+
+However, if the device randomly sampled the refreshed key, the invalid 
+curve attack in its current form could not be utilised. The attack relies 
+on acquiring the value of the key moduli a set of values, the product of 
+which is larger than the possible value of the key, meaning the attacker 
+can use the Chinese remainder theorem to calculate the value of the key. 
+If the key were random for each interaction, the attacker would be 
+restricted to using a single interaction. In cases such as this, the 
+security level of the ECDLP is related to the size of E(𝔽_p) where 𝔽_p is 
+the field the curve is defined over. Curves with a larger size have more 
+potential key values and are therefore more secure. P-256 has an order of 
+115792089210356248762697446949407573529996955224135760342422259061068512044
+369, which is the number of possible values of the key the attacker may 
+have to attempt for each interaction.
+
+An attack may still be feasible if the device was used in the 
+Elliptic-curve Diffie-Hellman (ECDH) key agreement protocol. In ECDH, Alice 
+selects a private key d_A ∈ [1, n – 1] and a public key Q_A = d_A × G, 
+where n is the size of E(𝔽_p), and G is the generator. Bob also selects a 
+private key d_B ∈ [1, n – 1] and a public key Q_B = d_B × G. Alice then 
+computes d_A × Q_B = d_A × d_B × G = (x_k, y_k). Bob also computes d_B × 
+Q_A = d_B × d_A × G = (x_k, y_k). The shared secret is x_k. Suppose an 
+attacker implemented a man-in-the-middle attack. The attacker could 
+intercept the public keys Q_A and Q_B transmitted between Alice and Bob and 
+forward the point at infinity 𝓞 to both parties. Since the device performs 
+no point validation, the point at infinity would be used as each 
+recipient's public key. As a result, Alice and Bob would both compute d_A × 
+𝓞 = 𝓞 and d_B × 𝓞 = 𝓞. Therefore, the secret key x_k would be 0. The 
+attacker could therefore recover the secret key with probability 1.

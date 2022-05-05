@@ -16,7 +16,7 @@
 So that we can calibrate and improve the assignment in the future, give us
 a rough idea how long (in hours) you spent on it *in total*:
 
-effort : [...] hours
+effort : 100 hours
 
 ===============================================================================
 
@@ -31,7 +31,7 @@ resources is allowed *iff.* it
 Let us know any third-party source code or resources you used (if any) so
 it's clear what's your work and what isn't:
 
-[...]
+N/A
 
 ===============================================================================
 
@@ -57,22 +57,22 @@ and require self-directed research beyond the unit material.
 
 4.1 COMS30049, i.e., level-H/6
 
-[?] Stage 1: padding => an attack based on error messages
+[X] Stage 1: padding => an attack based on error messages
     - correct challenge material                                     ( 40%)
     - solution quality wrt. efficiency, robustness etc.              ( 30%)
     - analysis questions                                             ( 30%)
 
-[?] Stage 2: time    => an attack based on execution time
+[X] Stage 2: time    => an attack based on execution time
     - correct challenge material                                     ( 40%)
     - solution quality wrt. efficiency, robustness etc.              ( 30%)
     - analysis questions                                             ( 30%)
 
-[?] Stage 3: power   => an attack based on power consumption
+[X] Stage 3: power   => an attack based on power consumption
     - correct challenge material                                     ( 40%)
     - solution quality wrt. efficiency, robustness etc.              ( 30%)
     - analysis questions                                             ( 30%)
 
-[?] Stage 4: bug     => an attack based on faulty computation
+[X] Stage 4: bug     => an attack based on faulty computation
     - correct challenge material                                     ( 40%)
     - solution quality wrt. efficiency, robustness etc.              ( 30%)
     - analysis questions                                             ( 30%)
@@ -115,7 +115,8 @@ Any other documentation, notes or comments that you think are important or
 might be easy to overlook (e.g., a subtle issue or technique in associated
 source code) should go here:
 
-[...]
+- To compile the code: make all
+- To run attacks WITH a configuration file: ./attack ./1915500.D 1915500.conf
+- To run attacks WITHOUT a configuration file: ./attack ./1915500.D
 
 ===============================================================================
-

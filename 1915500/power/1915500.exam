@@ -3,6 +3,49 @@ Q.1 As a security consultant, you have been working on a prototype of the
     make any alteration necessary (in software or hardware) to prevent the
     attack.  Explain the options available, and which one you would
     recommend.
+
+The countermeasures to prevent the attack broadly fit into two categories: 
+hiding, which decreases the signal-to-noise ratio, and masking, which 
+introduces a randomised redundant representation.
+
+The fact that the power consumption traces are all perfectly aligned 
+enables the attacker to identify a correlation between a specific point in 
+each power consumption trace and the hamming weight of each byte of the 
+key. To rectify this, the vendor could use hiding in software to misalign 
+the execution of the target operation. There are several methods they could 
+employ to do this. Firstly, since the target operation is the SubBytes 
+procedure, the vendor could use temporal padding to introduce a random 
+delay at the start of the procedure. However, this would increase the 
+program's execution time and may not be appropriate if a short execution 
+time was of great importance. Furthermore, with a sufficient number of 
+samples, the attacker may still be able to identify a correlation. If 
+latency were of great importance, a different approach would be to use 
+temporal reordering to process the state matrix elements in a different 
+permuted order. There is a trade-off between the permutation's quality and 
+the permutation's overhead. Overall, however, the attacker could still 
+mount an effective power analysis attack with a sufficient number of 
+samples.
+
+The attacker can model the power consumption using the Hamming weight. To 
+rectify this, the vendor could use masking in software to mask each element 
+of the state matrix before computation begins. The vendor would need to 
+redefine each of the round functions to be able to compute using such 
+representation correctly. The attacker would no longer be able to model the 
+power consumption of the target in the same way as previously. Whilst this 
+protects the implementation against first-order power analysis attacks, 
+higher-order power analysis attacks are still effective.
+
+Modern techniques often use a carefully constructed layered approach of 
+various hardware and software-based countermeasures to minimise the chance 
+of an attacker mounting a successful differential power analysis attack. 
+Therefore, I recommend that the vendor use both software-based hiding and 
+masking techniques. The masking techniques would prevent a first-order 
+differential power analysis attack, whilst the hiding techniques would 
+increase the noise and make a higher-order power analysis attack more 
+computationally expensive.
+
+---------------------------------------------------------------------------
+
 Q.2 The vendor of the attack target opts to replace the 8-bit Intel 8051
     micro-processor with a modern, 32-bit ARM Cortex-M0; they supplement it
     with hardware support for that allows single-cycle operations on 32
@@ -10,12 +53,87 @@ Q.2 The vendor of the attack target opts to replace the 8-bit Intel 8051
     encryption or decryption, but they *also* want to know if it might make
     the device more secure wrt.  DPA attacks: what is your assessment, and
     why ?
+
+The attacker currently computes individual bytes of the key one by one 
+because the 8-bit Intel 8051 microprocessor communicates individual bytes 
+across a bus to the S-Box lookup table. Therefore, the attacker can model 
+the power consumption using the Hamming weight since the power consumption 
+is proportional to the value communicated. By replacing the micro-processor 
+with a 32-bit ARM Cortex-M0, the device communicates four bytes across the 
+bus at a time. Therefore, there would be significantly more noise, and a 
+more significant number of samples would be needed to calculate a single 
+byte of the key.
+
+Another option would be to alter the attack to calculate four bytes of the 
+key at a time, which would reduce the noise but increase the number of key 
+hypotheses. Therefore, the attack would take significantly more time.
+
+Overall, I assess that the vendor has made the device significantly more 
+secure concerning differential power analysis attacks. Either the attacker 
+has to generate significantly more samples to counteract the noise or test 
+significantly more key hypotheses
+
+---------------------------------------------------------------------------
+
 Q.4 DPA attacks include a statistical analysis step, for which one option
     is use of the t-test.  Explain what the difference between a standard
     t-test and Kocher's method is.  Given that in a DPA attack one might
     have unequal sets of measurements associated with 0 and 1, is a
     standard t-test actually an appropriate choice?
+
+Kocher's method involves finding the difference between the means of a 
+specific point in the power traces for which the associated value is zero 
+or one. One calculates the associated value using a hypothesis for the 
+target material (i.e. the key).
+
+The independent two-sample t-test is a statical hypothesis test used to 
+determine if there is a significant difference between the means of two 
+groups. The standard version assumes equal sample size and variance. The 
+test statistic t is calculated as t = (X_1 - X_2) / (s_p * (2 / n)^(1 / 2)) 
+where s_p = ((s^2_X_1 + s^2_X_2) / 2)^(1 / 2) is the pooled standard 
+deviation. X_1 and X_2 are the sample means for the traces for which the 
+associated value is zero or one. For significance testing, the degrees of 
+freedom is 2n – 2, where n is the number of samples for each group. This 
+version of the t-test is not an appropriate choice since a DPA attack may 
+have an unequal set of measurements. There are, however, versions of the 
+t-test for groups with unequal sample sizes, which would be appropriate in 
+this case.
+
+The two tests have both similarities and differences. Both tests similarly 
+involve comparing the means, but the differences arise because the t-test 
+then divides this value to provide a test statistic. Unlike Kocher's 
+method, this test statistic can then be compared with a value in a t table 
+to identify whether the difference between the means is significant.
+
+---------------------------------------------------------------------------
+
 Q.7 The power consumption traces you used in this attack are perfectly
     aligned.  What does "alignment" mean in this context, and how could
     misalignment occur in practice?  How could you alter your attack
     strategy to compensate for misalignment?
+
+In the context of this attack, perfect alignment refers to the fact that 
+each operation occurs at the same position within each power trace. Because 
+of this, the attacker can identify a maximum correlation between a point in 
+each power trace (corresponding to the target operation) and the estimated 
+power consumption for a specific hypothesis of the value of one byte of the 
+key.
+
+Misalignment can occur in practice due to either inaccuracy in triggering 
+the power measurements or a deliberate countermeasure.
+
+If the misalignment was due to inaccuracies in triggering the power 
+measurements, the attacker could use static alignment. To implement static 
+alignment, the attacker would have to determine the duration of the timing 
+inaccuracies and shift the traces accordingly.
+
+In contrast, if the misalignment was due to deliberate countermeasures, 
+static alignment could not be used to align the traces fully. In such 
+cases, the attacker would implement some form of dynamic alignment. Dynamic 
+alignment is a generic term that encompasses a group of algorithms used to 
+match parts of power traces at different offsets and perform nonlinear 
+resampling of the traces. A dynamic alignment algorithm ensures these parts 
+are located at the same offsets within each power trace. One form of 
+dynamic alignment an attacker could implement is elastic alignment. Elastic 
+alignment uses FastDTW, a dynamic time warping algorithm used in speech 
+recognition.

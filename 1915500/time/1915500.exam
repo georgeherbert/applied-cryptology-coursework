@@ -2,14 +2,170 @@ Q.1 The vendor of the attack target is concerned that news of this attack
     could scare off potential customers; they will make any alteration
     necessary (in software or hardware) to prevent the attack.  Explain the
     options they have, and which one you would recommend.
+
+The countermeasures to prevent the attack broadly fit into two categories: 
+hiding, which decreases the signal-to-noise ratio, and masking, which 
+introduces a randomised redundant representation.
+
+Since the attack relies on the data-dependent subtraction in the Montgomery 
+multiplication operation, one countermeasure falling into the hiding 
+category would be to perform a subtraction operation regardless of whether 
+the result is greater than or equal to the modulus. To ensure the correct 
+result is still obtained, in cases whereby the result is smaller than the 
+modulus, the result should be stored in a dummy variable and thrown out.
+
+Whilst this seems an effective countermeasure, it has some flaws. Firstly, 
+despite one now performing a subtraction operation unconditionally, there 
+may still be some distinguishable timing differences due to whether or not 
+the device stores the result of the subtraction to the result variable or a 
+dummy variable. This difference may exist due to temporal locality in the 
+cache hierarchy. Therefore, the attacker need only generate more samples to 
+produce a detectable difference in timing. Furthermore, this solution would 
+increase the overall execution time of the program due to the increased 
+number of operations; this would be most apparent in cases whereby the 
+reduction operation is infrequently necessary.
+
+One countermeasure falling into the masking category would be to use 
+blinding. The vendor of the attack target could randomise the base or the 
+private exponent. The device could compute c^d' instead of c^d to randomise 
+the private exponent, such that d’ = d + m × ɸ(N) with random m ∈ ℤ. 
+However, it is crucial to remember that though this would prevent the 
+attacker from recovering the specific private exponent d, the attacker c
+ould still recover d’. Since c^d’ = c^d, recovery of d’ would still enable 
+the attacker to decrypt the ciphertext. Therefore, a better option would be 
+to randomise the base; the device selects random m, m' ∈ ℤ*_N such that 1 / 
+m' ≡ m^d (mod N). Then, to decrypt the ciphertext, the device computes m' × 
+(m × c)^d (mod N), which would prevent the attack since each interaction 
+would involve a different m' and m. Therefore, the device would not 
+consistently execute the Montgomery reduction.
+
+Overall, I would recommend that the vendor use blinding to randomise the 
+base.
+
+---------------------------------------------------------------------------
+
 Q.2 The vendor of the attack target is concerned that a similar attack may
     also apply to their implementation of ElGamal encryption.  Explain the
     potential for such an attack, and how it differs wrt.  the case of RSA.
+
+In Elgamal decryption, Alice decrypts a ciphertext (c_1, c_2) with her 
+private key x. To do so, there are several methods she could utilise.
+
+In the first method, Alice computes the shared secret s = c_1^x. She then 
+calculates the inverse of the shared secret—using a method such as the 
+extended Euclidean algorithm—which she multiplies with c_2 to recover the 
+plaintext m = c_2 × s^-1. Suppose the device produced by the vendor used 
+this method. If the vendor implemented modular exponentiation using 
+left-to-right binary exponentiation with Montgomery multiplication, one 
+could use the same attack to recover the secret key x.
+
+In the second method, Alice does not compute the shared secret; instead, 
+she computes the inverse of the shared secret directly s^(-1) = 
+c_1^(q – x), where q is the order of the cyclic group. As in the previous 
+method, she multiplies the inverse of the shared secret by c_2 to recover 
+the plaintext m = c_2 × s^-1. Once again, if the vendor implemented modular 
+exponentiation using left-to-right binary exponentiation with Montgomery 
+multiplication, one could use the same attack to recover q – x. To recover 
+the secret key x, one only needs to subtract q and negate the result.
+
+Overall, both methods are potentially susceptible to the same attack 
+depending on the specifics of the implementation (i.e. the vendor 
+implemented modular exponentiation using left-to-right binary 
+exponentiation with Montgomery multiplication). However, the attacker would 
+require more interactions with the device due to the target operation 
+constituting a less significant part of the decryption process because 
+Elgamal decryption contains more operations than RSA decryption.
+
+---------------------------------------------------------------------------
+
 Q.3 Your implementation of this attack will use some form of statistical
     test.  Explain what test you have used, how it works, and also how it
     compares with at least one alternative.
+
+This attack relies on comparing samples to reason about bits of the private 
+exponent. In my implementation, I record the times required to decrypt each 
+ciphertext and use these times to hypothesise about the next bit of the 
+private exponent. I simulate the next stage of the Montgomery 
+exponentiation algorithm as if the next bit of the private exponent was one 
+and partition the array of ciphertext times into two arrays: s_1 and s_2. 
+s_1 contains the times for which the Montgomery reduction occurs and s_2 
+contains the times for which the Montgomery reduction didn’t occur. I also 
+simulate the next stage of the Montgomery exponentiation algorithm as if 
+the next bit of the private exponent was zero and repeat the same process, 
+partitioning the array of times into two arrays: s_3 and s_4.
+
+To identify the next bit of the private exponent, I compare the means of 
+s_1 with s_2, and s_3 with s_4. Let m_1, m_2, m_3 and m_4 be the means of 
+s_1, s_2, s_3 and s_4, respectively. If the next bit of the key were one, 
+one would expect a detectable difference between m_1 and m_2, but no real 
+difference between m_3 and m_4. In contrast, if the next bit of the key 
+were zero, one would expect no real difference between m_1 and m_2, but a 
+large difference between m_3 and m_4.
+
+Therefore, I have implemented a simple comparison of the means to 
+distinguish the next bit of the private exponent. In my program I calculate 
+diff = abs(m_1 – m_2) – abs(m_3 – m_4). If the difference is greater than 
+zero, the next bit of the key is likely to be a one; in contrast, if the 
+difference is less than zero, the next bit of the key is likely to be a 
+zero. I also check that the absolute value of the difference is larger than 
+a given threshold; if not, then it is possible an error has occurred and is 
+dealt with appropriately.
+
+There were various other statistical tests I could have implemented. One 
+such test is the unequal sample size variation of Student’s independent 
+two-sample t-test, which produces a test statistic t. I could have used the 
+t-test to identify whether a significant difference existed between m_1 and 
+m_2 or between m_3 and m_4. If a significant difference occurred between 
+m_1 and m_2, but not m_3 and m_4, the next bit of the key would likely be 
+one. In contrast, if a significant difference occurred between m_3 and m_4, 
+but not m_1 and m_2, the next bit of the key would likely be zero. If there 
+were a significant difference between both means or neither means, it would 
+be possible that an error had occurred and would have to be dealt with 
+appropriately.
+
+I opted to use the simple comparison of the means instead of the t-test. In 
+experiments, the t-test offered no real advantage over a simple comparison 
+of the means in terms of accuracy; Dhme et al. also discovered no 
+advantage. Therefore, since the t-test is more computationally expensive, I 
+opted to use the simple comparison of the means since it offers an 
+advantage in terms of latency.
+
+---------------------------------------------------------------------------
+
 Q.7 Imagine the attack target vendor asks you to update the implementation
     of binary exponentiation with a windowed alternative.  Which algorithm
     would you recommend they use?  Discuss the advantages/disadvantages of
     your choice in terms of latency, memory footprint, and (side-channel)
     security.
+
+The first algorithm the vendor could implement is a fixed-size windowed 
+approach. In the fixed-size windowed approach, to compute x^y, y is first 
+recoded into y' in base m, where m is a power of two (i.e. the 2k-ary 
+method). In this approach, the device can precompute the values of x to the 
+power of each possible value of y. Overall, there is a trade-off between 
+time and space. We have to precompute x to more powers with digits of a 
+larger magnitude. However, there is a reduced length and number of non-zero 
+digits in y', so we perform fewer multiplication operations. From a 
+security standpoint, in the prior approach, if the y_i-th bit were zero, 
+the temporary value t would not be multiplied, whereas if the y_i-th bit 
+were one, the device would multiply t by x. In the 2k-ary method, y_i ∈ {1, 
+2, 3, …, 2^k - 1}; therefore, the attack would have to be adapted to 
+compute multiple bits at a time. The attacker would be required to generate 
+more samples to identify the signal from the noise.
+
+The second algorithm the vendor could implement is a sliding windowed 
+approach. The sliding windowed approach is an efficient variant of the 
+2k-ary approach that can improve efficiency by using a sliding window to 
+reduce the number of operations further. Moreover, the memory footprint on 
+the device is smaller since it only precomputes the odd powers of x. From a 
+security standpoint, as with the fixed-size windowed approach, the attack 
+would have to be adapted to compute potentially multiple bits of the key at 
+a time. Due to the dynamic window size, the attacker would have to try many 
+potential values. Once again, the attacker would be required to generate 
+more samples to identify the signal from the noise.
+
+Overall, both approaches are more efficient and secure than the previous 
+approach. I would recommend the sliding windowed approach since it has a 
+smaller memory footprint, reduces the number of multiplication operations, 
+and requires the attacker to try a larger number of values to reason about 
+bits of the private exponent.

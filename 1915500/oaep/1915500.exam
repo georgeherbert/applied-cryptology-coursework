@@ -1,11 +1,225 @@
 Q.1 Consider the parameters N = 3551, e = 5, d = 1373, and c = 888, all
     represented in decimal.  Use them to explain, in your own words, the
     principle of this attack (e.g., how and why it works).
+
+Device D implements the RSA-OAEP-Decrypt operation, as standardised in 
+PKCS#1 v2.1. The device outputs several error codes. Error #1 occurs in 
+stage 3.g if the octet string passed to the EME-OAEP decoding phase does 
+not have a most significant 0x00 octet; error #2 occurs in stage 3.g if the 
+octet string passed to the decoding phase does not produce a hashed label 
+that matches or does not contain a 0x01 octet between any padding and the 
+message. According to PKCS#1 v2.1., these errors should be 
+indistinguishable from one another; however, the device does not adhere to 
+this advice and is thus susceptible to a chosen ciphertext attack.
+
+When the attacker inputs a ciphertext, if error #1 occurs, the attacker 
+knows that the encoded message y outputted by the RSA decryption operation 
+is too large to fit into one fewer octets than the modulus. Conversely, if 
+error #2 occurs, the attacker knows that the encoded message is small 
+enough to fit into fewer octets than the modulus.
+
+Two crucial properties enable this attack:
+1.  The attacker can treat the device as an oracle. For any ciphertext, 
+    the oracle returns whether the corresponding plaintext is < B (i.e. 
+    error #2) or ≥ B  (i.e. error #1), where B is the maximum number one 
+    fewer octets than the modulus can represent, and N is the modulus.
+2.  The attack relies on the homomorphic property of RSA decryption. 
+    Specifically, it relies on the fact that if the attacker sends f^e × c 
+    (mod N) to the device, the device will compute (f^e × c)^d ≡ f^(e × d) 
+    × c^d ≡ f × m (mod N).
+
+The attack works by sending different values of f^e × c (mod N) to the 
+device. The device acts as an oracle that tells the attacker whether the 
+corresponding plaintext f × m (mod N) is < B or ≥ B. By sending different 
+values of f, the attacker can narrow down the range of m to a single value.
+
+Using N = 3551, e = 5, d = 1373 and c = 888 as an example:
+
+Setup:
+
+First calculate the byte length k of the modulus: k = ⌈log_256(3551)⌉ = 
+⌈1.47⌉ = 2
+Then calculate the maximum number that can be represented by one fewer 
+octets than the modulus B = 2^(8 * (2 - 1)) = 256
+
+Stage 1:
+
+In the first attack stage, we send multiples of 2, 4, 8, …, 2^i until the 
+oracle returns ≥ 256. For each multiple f_1 the possible values of f_1 × m 
+span a single boundary point at B.
+
+-   We know m ∈ [0, 256).
+
+-   Let f_1 := 2.
+-   Therefore, f_1 × m = 2 × m ∈ [0, 512).
+-   Send c := f_1^e * c ≡ 2^5 * 888 ≡ 8 (mod 3551) to the device.
+-   The device computes em := c^d ≡ 8^1373 ≡ 246 (mod 3551) < 256 (error 
+    #2).
+-   Therefore, we know 2 × m is in the range [0, 256).
+
+-   Let f_1 := f_1 * 2 = 2 * 2 = 4.
+-   Therefore f_1 × m = 4 × m ∈ [0, 512).
+-   Send c := f_1^e * c ≡ 4^5 * 888 ≡ 256 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 256^1373 ≡ 492 (mod 3551) ≥ 256 (error 
+    #1).
+-   Therefore, we know 4 × m ∈ [256, 512). This can be rephrased as 2 × m 
+    is in the range [128, 256).
+
+Stage 2:
+
+In the second attack stage, we start with a multiple f_2 such that f_2 × m 
+is just less than N + B = 3807 for the maximum possible m. We keep 
+increasing this multiple until the oracle returns < 256. For each multiple 
+f_2 the possible values f_2 × m span a single boundary point at N.
+
+-   We know 2 × m ∈ [128, 256).
+
+-   Let f_2 := ⌊(N + B) / B)⌋ * (f_1 / 2) = ⌊(3551 + 256) / 256)⌋ * (4 / 2) 
+    = 28.
+-   Therefore f_2 × m = 28 × m ∈ [1775.5, 3807).
+-   Send c := f_2^e * c ≡ 28^5 * 888 ≡ 2331 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 2331^1373 ≡ 3444 (mod 3551) ≥ 256 
+    (error #1).
+-   Therefore, we know 28 × m is in the range [1775.5, 3551).
+
+-   Let f_2 := f_2 + (f_1 / 2) = 28 + (4 / 2) = 30.
+-   Therefore, f_2 × m = 30 × m ∈ [1775.5, 3807).
+-   Send c := f_2^e * c ≡ 30^5 * 888 ≡ 2790 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 2790^1373 ≡ 139 < 256 (error #2).
+-   Therefore, we know 30 × m ∈ [3551, 3807).
+
+Stage 3:
+
+In the third attack stage, we try multiples of f_3 that give a range for 
+f_3 × m about 512 integers wide and spanning a single boundary point. Each 
+oracle response will halve the range back to a width of about B integers, 
+so the next multiple will be twice the previous value approximately.
+
+-   We know 30 × m ∈ [3551, 3807). Rephrasing, we have a multiple, 30, and 
+    a range [m_min, m_max) of possible m values.
+
+-   m_min := ⌈N / f_2⌉ = ⌈3551 / 30⌉ = 119.
+-   m_max := ⌊(N + B) / f_2⌋ = ⌊(3551 + 256) / 30⌋ = 126.
+
+-   We select a multiple f_tmp such that the width of f_tmp × m is 
+    approximately 2B. Let f_tmp := ⌊(2 * B) / (m_max - m_min)⌋ = ⌊(2 * 256) 
+    / (126 - 119)⌋ = 73.
+-   We select a boundary point in + B, near the range of _tmp × m. Let i := 
+    ⌊(f_tmp * m_min) / N⌋ = ⌊(73 * 119) / 3551⌋ = 2.
+-   We choose a multiple f_3 such that f_3 × m spans a single boundary at 
+    in + B. Let f_3 := ⌈(i * N) / m_min⌉ = ⌈(2 * 3551) / 119⌉ = 60.
+-   Send c := f_3^e * c ≡ 60^5 * 888 ≡ 505 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 1255^1373 ≡ 278 (mod 3551) ≥ 256 (error 
+    #1).
+-   Therefore, f_3 × m ∈ [7358, 7614).
+-   Therefore, m_min := ⌈(i * N + B) / f_3⌉ = ⌈(2 * 3551 + 256) / 60⌉ = 
+    123.
+
+-   We select a multiple f_tmp such that the width of f_tmp × m is 
+    approximately 2B. Let f_tmp := ⌊(2 * B) / (m_max - m_min)⌋ = ⌊(2 * 256) 
+    / (126 - 123)⌋ = 170.
+-   We select a boundary point in + B, near the range of _tmp × m. Let i := 
+    ⌊(f_tmp * m_min) / N⌋ = ⌊(170 * 123) / 3551⌋ = 5.
+-   We choose a multiple f_3 such that f_3 × m spans a single boundary at 
+    in + B. Let f_3 := ⌈(i * N) / m_min⌉ = ⌈(5 * 3551) / 123⌉ = 145.
+-   Send c := f_3^e * c ≡ 145^5 * 888 ≡ 1118 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 1118^1373 ≡ 80 (mod 3551) < 256 (error 
+    #2).
+-   Therefore, f_3 × m ∈ [17755, 18011).
+-   Therefore, m_max := ⌈(i * N + B) / f_3⌉ = ⌊(5 * 3551 + 256) / 145⌋ = 
+    124.
+
+-   We select a multiple f_tmp such that the width of f_tmp × m is 
+    approximately 2B. Let f_tmp := ⌊(2 * B) / (m_max - m_min)⌋ = ⌊(2 * 256) 
+    / (124 - 123)⌋ = 512.
+-   We select a boundary point in + B, near the range of _tmp × m. Let i := 
+    ⌊(f_tmp * m_min) / N⌋ = ⌊(512 * 123) / 3551⌋ = 17.
+-   We choose a multiple f_3 such that f_3 × m spans a single boundary at 
+    in + B. Let f_3 := ⌈(i * N) / m_min⌉ = ⌈(17 * 3551) / 123⌉ = 491.
+-   Send c := f_3^e * c ≡ 491^5 * 888 ≡ 3281 (mod 3551) to the oracle.
+-   The device computes em := c^d ≡ 3281^1373 ≡ 26 (mod 3551) < 256 (error 
+    #2).
+-   Therefore, f_3 × m ∈ [60367, 60623). 
+-   Therefore, m_max := ⌈(i * N + B) / f_3⌉ = ⌊(17 * 3551 + 256) / 491⌋ = 
+    123.
+
+At this point, m_min = m_max, so we have reduced the possible values of m 
+down to a single value, 123.
+
+---------------------------------------------------------------------------
+
 Q.2 To prevent the attack, the vendor suggests altering the software: the
     idea is that no matter what error occurs, the same error code will be
     produced.  Explain whether (and why, or why not) this change alone is
     sufficient.
+
+Upon initial inspection, displaying the same error code seems like it would 
+prevent the attacker from being able to distinguish between the types of 
+error, which would be sufficient to prevent the attack. However, this is 
+not strictly true—there are some exceptions.
+
+Some implementations output an error message as well as an error code. If 
+the vendor opted to output an error message, any difference between the 
+error messages would enable the attacker to distinguish between the errors, 
+no matter how minuscule. Therefore, the implementation would be susceptible 
+to the same attack. These differences may include a spelling mistake, an 
+incorrect capitalisation, or even a punctuation mistake.
+
+If the device was to output system logs, it might still be susceptible to 
+the attack. System logs often contain more detailed descriptions of 
+specific errors that are not outputted explicitly to the attacker. If the 
+attacker could access these logs, they could potentially use them to 
+distinguish between various errors and mount a similar successful attack.
+
+Even in an implementation whereby the error messages were identical and the 
+attacker could not access any system logs, an attacker could distinguish 
+between various errors if they took different amounts of time. For example, 
+error #1 occurs if the octet string passed to the EME-OAEP decoding phase 
+does not have a most significant 0x00 octet. Error #2 occurs if the octet 
+string passed to the decoding phase does not produce a hashed label that 
+matches or does not contain a 0x01 octet between any padding and the 
+message. Therefore, the device may raise error #1 at the start of the 
+EME-OAEP decoding stage; it may raise error #2 at the end of the EME-OAEP 
+decoding stage. Suppose this was the case; therefore, since the time to 
+hash the label with SHA-1 depends on the label's size, an arbitrarily long 
+label could be selected to introduce any timing difference necessary.
+
+In conclusion, altering the software to produce the same error code may not 
+be sufficient to prevent an attack. There is a risk of the implementation 
+still being vulnerable since the algorithm relies on the obscurity of the 
+source of errors, the lack of access to logs and the obscurity of timing 
+information.
+
+---------------------------------------------------------------------------
+
 Q.6 RSA has a homomorphic property: explain what this means, and how it
     relates to this attack.
+
+Homomorphic encryption is a form of encryption that enables users to 
+perform computations on encrypted data. Operations performed on the data 
+produce identical outputs regardless of whether one performed the 
+operations on the data in its encrypted or decrypted form.
+
+The homomorphic property of RSA is such that E(m_1) × E(m_2) ≡ m_1^e × 
+m_2^e (mod N) = (m_1 × m_2)^e (mod N) ≡ E(m_1 × m_2). In other words, one 
+can multiply two encrypted values E(m_1) and E(m_2), and the result is 
+identical to that if they had multiplied m_1 and m_2 before encryption.
+
+In the attack, we attempt to identify the encoded message em from the 
+ciphertext c, whereby c = E(em) = em^e. If one encrypted a value f with 
+RSA, it would have the value E(f) = f^e. Therefore, by sending f^e × c to 
+the device, we are sending E(f) × E(em) = E(f × em), and so the device 
+decrypts this value to f × em.
+
+---------------------------------------------------------------------------
+
 Q.7 Side-channel attacks are often categorised as being either simple or
     differential: how would categorise this attack, and why?
+
+In this side-channel attack, the attacker compares the different error 
+codes from many interactions with the target device. Therefore, I would 
+categorise this attack as a differential side-channel attack. 
+
+This attack is a differential side-channel attack, which is in contrast to 
+a simple (i.e. non-differential) side-channel attack, in which the attacker 
+reasons about the leakage from a single interaction.
